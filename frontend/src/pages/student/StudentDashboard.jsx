@@ -48,10 +48,10 @@ export default function StudentDashboard() {
     const saved = localStorage.getItem("student_profile_v2");
     if (saved) return JSON.parse(saved);
     return {
-      name: user?.name || "Karthik",
-      studentId: "9901244",
-      department: user?.department || "Computer Science",
-      yearSemester: "3rd Year / 6th Sem"
+      name: user?.name || "Student",
+      studentId: user?.id ? `STU-${user.id}` : "",
+      department: user?.department || "General",
+      yearSemester: ""
     };
   });
 
@@ -92,7 +92,7 @@ export default function StudentDashboard() {
     (c) => c.status !== "Resolved" && c.status !== "Rejected"
   ).length;
   const resolvedCount = complaints.filter((c) => c.status === "Resolved").length;
-  const resolutionRate = totalCount > 0 ? Math.round((resolvedCount / totalCount) * 100) : 85; // fallbacks to beautiful 85% as mock standard
+  const resolutionRate = totalCount > 0 ? Math.round((resolvedCount / totalCount) * 100) : 0;
 
   // Dynamic Category count of actual database complaints
   const academicCount = complaints.filter((c) => c.category === "Academic" || c.category === "Faculty").length;
@@ -102,43 +102,38 @@ export default function StudentDashboard() {
 
   const totalCalculated = academicCount + facilitiesCount + transportCount + othersCount;
 
-  // Let's create beautiful dynamic activity logs based on real grievances, combining with awesome fallbacks
-  const realActivities = complaints.slice(0, 2).map((c) => {
+  // Create dynamic activity logs based strictly on real backend complaints
+  const realActivities = complaints.map((c) => {
     let icon = Wrench;
     if (c.category === "Transport") icon = Bus;
     if (c.category === "Academic" || c.category === "Faculty") icon = BookOpen;
 
+    let relativeTime = "Recently";
+    if (c.created_at) {
+      try {
+        const diffMs = Date.now() - new Date(c.created_at).getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+        if (diffMins < 1) relativeTime = "Just now";
+        else if (diffMins < 60) relativeTime = `${diffMins}m ago`;
+        else {
+          const diffHours = Math.floor(diffMins / 60);
+          if (diffHours < 24) relativeTime = `${diffHours}h ago`;
+          else relativeTime = new Date(c.created_at).toLocaleDateString();
+        }
+      } catch (e) {
+        relativeTime = "Recently";
+      }
+    }
+
     return {
       id: c.id,
       title: `Status Update: Case #G-2026-0${c.id}`,
-      description: `Your grievance regarding "${c.title}" has been moved to ${c.status}.`,
-      status: c.status,
-      time: "Just now",
+      description: `Your grievance regarding "${c.title}" has been moved to ${c.status || "Submitted"}.`,
+      status: c.status || "Submitted",
+      time: relativeTime,
       icon: icon
     };
   });
-
-  const mockActivities = [
-    {
-      id: "G-2024-081",
-      title: "Status Update: Case #G-2024-081",
-      description: 'Your grievance regarding "Lab Equipment Maintenance" has been moved to Resolved.',
-      status: "Resolved",
-      time: "2h ago",
-      icon: Wrench
-    },
-    {
-      id: "G-2024-092",
-      title: "Transport Feedback",
-      description: "Route #04 delay report G-2024-092 is currently being audited by transport management.",
-      status: "In Review",
-      time: "Yesterday",
-      icon: Bus
-    }
-  ];
-
-  // Combine real activity blocks with mock logs to ensure aesthetic presentation matching screenshots
-  const listActivities = realActivities.length > 0 ? [...realActivities, ...mockActivities] : mockActivities;
 
   // Format Helper for leading zeros in visual layouts
   const formatNum = (num) => (num < 10 ? `0${num}` : num);
@@ -152,7 +147,7 @@ export default function StudentDashboard() {
             Welcome back, {profile.name}
           </h2>
           <p className="text-slate-500 text-sm font-medium mt-1">
-            You have <span className="text-[#064e3b] font-bold">{pendingCount || 3} active grievances</span> requiring attention.
+            You have <span className="text-[#064e3b] font-bold">{pendingCount} active grievances</span> requiring attention.
           </p>
         </div>
       </div>
@@ -169,9 +164,9 @@ export default function StudentDashboard() {
           </div>
           <div>
             <span className="text-[#0f172a] text-3xl font-extrabold block">
-              {formatNum(totalCount || 12)}
+              {formatNum(totalCount)}
             </span>
-            <span className="text-[10px] font-bold text-slate-400 tracking-wider">GRIEVANCES</span>
+            <span className="text-[10px] font-bold text-slate-400 tracking-wider">TOTAL COMPLAINTS</span>
           </div>
         </div>
 
@@ -185,30 +180,29 @@ export default function StudentDashboard() {
           </div>
           <div>
             <span className="text-[#0f172a] text-3xl font-extrabold block text-emerald-700">
-              {formatNum(pendingCount || 3)}
+              {formatNum(pendingCount)}
             </span>
             <span className="text-[10px] font-bold text-slate-400 tracking-wider">PENDING</span>
           </div>
         </div>
 
-        {/* Card 3: Performance */}
+        {/* Card 3: Resolved */}
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex flex-col justify-between h-34 transition-all hover:translate-y-[-2px] hover:shadow-md">
           <div className="flex items-start justify-between">
             <div className="h-10 w-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-700">
-              <Timer className="h-5 w-5" />
+              <CheckCircle className="h-5 w-5" />
             </div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Performance</span>
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Resolved</span>
           </div>
           <div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-[#0f172a] text-3xl font-extrabold">4.2</span>
-              <span className="text-sm font-semibold text-slate-500">Days</span>
-            </div>
-            <span className="text-[10px] font-bold text-slate-400 tracking-wider">AVG RESOLUTION</span>
+            <span className="text-[#0f172a] text-3xl font-extrabold block text-emerald-700">
+              {formatNum(resolvedCount)}
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 tracking-wider">RESOLVED</span>
           </div>
         </div>
 
-        {/* Card 4: Closure */}
+        {/* Card 4: Closure / Success Rate */}
         <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-xs flex flex-col justify-between h-34 transition-all hover:translate-y-[-2px] hover:shadow-md">
           <div className="flex items-start justify-between">
             <div className="h-10 w-10 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-700">
@@ -218,7 +212,7 @@ export default function StudentDashboard() {
           </div>
           <div>
             <span className="text-emerald-500 text-3xl font-extrabold block">
-              {totalCount > 0 ? `${resolutionRate}%` : "85%"}
+              {totalCount > 0 ? `${resolutionRate}%` : "0%"}
             </span>
             <span className="text-[10px] font-bold text-slate-400 tracking-wider">SUCCESS RATE</span>
           </div>
@@ -241,14 +235,14 @@ export default function StudentDashboard() {
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
               {[
-                { label: "Academic", val: academicCount || 6, key: "academic" },
-                { label: "Facilities", val: facilitiesCount || 3, key: "facilities" },
-                { label: "Transport", val: transportCount || 2, key: "transport" },
-                { label: "Others", val: othersCount || 1, key: "others" },
+                { label: "Academic", val: academicCount, key: "academic" },
+                { label: "Facilities", val: facilitiesCount, key: "facilities" },
+                { label: "Transport", val: transportCount, key: "transport" },
+                { label: "Others", val: othersCount, key: "others" },
               ].map((cat, idx) => {
                 // Compute mathematical percent ratio safely
-                const totalBase = totalCalculated || 12;
-                const ratio = Math.max(10, Math.min(100, Math.round((cat.val / totalBase) * 100)));
+                const totalBase = totalCalculated || 1;
+                const ratio = totalCalculated > 0 ? Math.round((cat.val / totalBase) * 100) : 0;
                 
                 // Styling coloring configurations matching screenshot indicators
                 const barStyles = [
@@ -290,40 +284,60 @@ export default function StudentDashboard() {
             </div>
 
             <div className="divide-y divide-slate-100">
-              {listActivities.map((act, index) => {
-                const ActIcon = act.icon || Wrench;
-                return (
-                  <div key={`${act.id}-${index}`} className="p-6 flex gap-4 transition-colors hover:bg-slate-50/40">
-                    <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0 border border-emerald-100/50">
-                      <ActIcon className="h-5 w-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-[#0f172a] text-sm font-bold truncate">
-                          {act.title}
+              {realActivities.length > 0 ? (
+                realActivities.map((act, index) => {
+                  const ActIcon = act.icon || Wrench;
+                  return (
+                    <div key={`${act.id}-${index}`} className="p-6 flex gap-4 transition-colors hover:bg-slate-50/40">
+                      <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0 border border-emerald-100/50">
+                        <ActIcon className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1 min-w-0 text-left">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[#0f172a] text-sm font-bold truncate">
+                            {act.title}
+                          </p>
+                          <span className="text-xs text-slate-400 font-medium shrink-0">
+                            {act.time}
+                          </span>
+                        </div>
+                        <p className="text-slate-500 text-xs mt-1.5 leading-relaxed font-semibold">
+                          {act.description}
                         </p>
-                        <span className="text-xs text-slate-400 font-medium shrink-0">
-                          {act.time}
+
+                        {/* Styled Dynamic Badges matching current resolutions */}
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide mt-3.5
+                          ${act.status === "Resolved" 
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
+                            : "bg-amber-50 text-amber-700 border border-amber-100"
+                          }
+                        `}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${act.status === "Resolved" ? "bg-emerald-500" : "bg-amber-500"}`} />
+                          {act.status}
                         </span>
                       </div>
-                      <p className="text-slate-500 text-xs mt-1.5 leading-relaxed font-medium">
-                        {act.description}
-                      </p>
-
-                      {/* Styled Dynamic Badges matching current resolutions */}
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide mt-3.5
-                        ${act.status === "Resolved" 
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
-                          : "bg-amber-50 text-amber-700 border border-amber-100"
-                        }
-                      `}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${act.status === "Resolved" ? "bg-emerald-500" : "bg-amber-500"}`} />
-                        {act.status}
-                      </span>
                     </div>
+                  );
+                })
+              ) : (
+                <div className="p-12 text-center flex flex-col items-center justify-center gap-4 bg-white">
+                  <div className="h-16 w-16 bg-slate-50 text-slate-400 rounded-3xl flex items-center justify-center border border-slate-100">
+                    <ClipboardList className="h-8 w-8" />
                   </div>
-                );
-              })}
+                  <div className="max-w-md mx-auto space-y-1">
+                    <h4 className="text-base font-extrabold text-slate-800">No activity yet.</h4>
+                    <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+                      Submit your first grievance to start tracking updates.
+                    </p>
+                  </div>
+                  <Link 
+                    to="/student/create"
+                    className="mt-2 inline-flex items-center justify-center bg-[#0c3127] hover:bg-[#0f4033] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all duration-150 shadow-sm active:scale-98"
+                  >
+                    Submit New Grievance
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
 
@@ -361,7 +375,7 @@ export default function StudentDashboard() {
                   <p className="text-xs font-bold text-emerald-800 uppercase tracking-wide bg-emerald-50 px-2 py-1 rounded-md">Edit Mode</p>
                 </div>
                 
-                <div className="space-y-3">
+                <div className="space-y-3 col-span-1 text-left">
                   <div>
                     <label className="text-[10px] font-bold text-slate-400 block mb-1">NAME</label>
                     <input 
@@ -380,7 +394,6 @@ export default function StudentDashboard() {
                       className="w-full text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       value={tempProfile.studentId}
                       onChange={(e) => setTempProfile({ ...tempProfile, studentId: e.target.value })}
-                      required
                     />
                   </div>
 
@@ -391,7 +404,7 @@ export default function StudentDashboard() {
                       value={tempProfile.department}
                       onChange={(e) => setTempProfile({ ...tempProfile, department: e.target.value })}
                     >
-                      {["Academic", "Computer Science", "Information Technology", "Mechanical Engineering", "Civil Engineering", "Electronics", "Electrical"].map((dept) => (
+                      {["Academic", "Computer Science", "Information Technology", "Mechanical Engineering", "Civil Engineering", "Electronics", "Electrical", "General"].map((dept) => (
                         <option key={dept} value={dept}>{dept}</option>
                       ))}
                     </select>
@@ -403,6 +416,7 @@ export default function StudentDashboard() {
                       type="text" 
                       className="w-full text-xs font-semibold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       value={tempProfile.yearSemester}
+                      placeholder="e.g. 3rd Year / 6th Sem"
                       onChange={(e) => setTempProfile({ ...tempProfile, yearSemester: e.target.value })}
                     />
                   </div>
@@ -417,7 +431,7 @@ export default function StudentDashboard() {
                 </button>
               </form>
             ) : (
-              <div className="flex flex-col gap-5">
+              <div className="flex flex-col gap-5 text-left">
                 {/* Profile Header Row with Student Portrait SVG */}
                 <div className="flex items-center gap-4">
                   <AvatarSVG />
@@ -425,9 +439,11 @@ export default function StudentDashboard() {
                     <h4 className="text-slate-800 font-extrabold text-lg leading-tight">
                       {profile.name}
                     </h4>
-                    <span className="text-slate-400 text-xs font-semibold block mt-1">
-                      ID: #{profile.studentId}
-                    </span>
+                    {profile.studentId && (
+                      <span className="text-slate-400 text-xs font-semibold block mt-1">
+                        ID: #{profile.studentId}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -437,10 +453,12 @@ export default function StudentDashboard() {
                     <span className="text-slate-400 font-semibold">Department</span>
                     <span className="text-slate-700 font-bold">{profile.department}</span>
                   </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-slate-400 font-semibold">Year / Semester</span>
-                    <span className="text-slate-700 font-bold">{profile.yearSemester}</span>
-                  </div>
+                  {profile.yearSemester && (
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-slate-400 font-semibold">Year / Semester</span>
+                      <span className="text-slate-700 font-bold">{profile.yearSemester}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

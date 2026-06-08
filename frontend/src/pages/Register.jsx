@@ -122,13 +122,17 @@ export default function Register() {
         <div className="bg-white border border-slate-200/90 rounded-3xl p-8 sm:p-10 shadow-3xs text-left w-full">
           
           {/* Headline block */}
-          <div className="space-y-2 mb-8">
+          <div className="space-y-4 mb-8">
             <h1 className="text-[#0c3127] text-2xl sm:text-3xl font-black tracking-tight">
-              Create Student Account
+              Student Registration
             </h1>
             <p className="text-xs sm:text-sm text-slate-400 font-semibold leading-relaxed">
-              Register to file grievances, track case progress, and communicate with university representatives.
+              Create your student grievance portal account.
             </p>
+            <div className="bg-amber-50 border border-amber-150 p-3 rounded-xl text-xs font-bold text-amber-800 flex items-start gap-2 text-left">
+              <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>Staff and administrator accounts are created by the institution.</span>
+            </div>
           </div>
 
           {/* Validation Alert messages */}

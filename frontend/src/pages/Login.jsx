@@ -9,22 +9,18 @@ import {
   Mail, 
   Eye, 
   EyeOff, 
-  ArrowRight, 
-  BookOpen, 
-  Award,
-  CheckCircle2,
-  LockKeyhole,
-  Info
+  ArrowRight,
+  LockKeyhole
 } from "lucide-react";
 
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
   
-  // Use screenshot default/example placeholder email
+  // Empty default inputs to reflect genuine institutional credentials format
   const [form, setForm] = useState({ 
-    email: "student@school.com", 
-    password: "password123" 
+    email: "", 
+    password: "" 
   });
   
   const [error, setError] = useState("");
@@ -37,8 +33,9 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      await login(form.email, form.password);
-      navigate("/");
+      const userData = await login(form.email, form.password);
+      const userRole = userData?.role || "student";
+      navigate(`/${userRole}`);
     } catch (err) {
       setError(err.response?.data?.detail || "Invalid institutional credentials. Please try again.");
     } finally {
@@ -46,19 +43,8 @@ export default function Login() {
     }
   }
 
-  // Helper method to let users click & pre-fill demo credentials instantly
-  const handleQuickFill = (roleType) => {
-    if (roleType === "student") {
-      setForm({ email: "student@school.com", password: "password123" });
-    } else if (roleType === "staff") {
-      setForm({ email: "staff@school.com", password: "password123" });
-    } else if (roleType === "admin") {
-      setForm({ email: "admin@school.com", password: "password123" });
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-between font-sans selection:bg-[#0c3127] selection:text-white">
+    <div className="min-h-screen bg-slate-50 flex flex-col justify-between font-sans selection:bg-[#0c3127] selection:text-white text-left">
       
       {/* Top Brand Banner bar */}
       <header className="bg-white border-b border-slate-100 px-6 sm:px-12 py-4 flex items-center justify-between shadow-3xs relative z-20">
@@ -79,15 +65,6 @@ export default function Login() {
             <button onClick={() => alert("Contact Student Affairs support service desk...")} className="hover:text-slate-800 transition-colors cursor-pointer">Support</button>
             <button onClick={() => alert("Access student guidelines and resolution handbooks...")} className="hover:text-slate-800 transition-colors cursor-pointer">Resources</button>
           </div>
-          
-          {/* Quick toggle default role simulation */}
-          <button 
-            type="button"
-            onClick={() => handleQuickFill("staff")}
-            className="bg-[#0c3127] hover:bg-[#0f4033] text-white text-[11px] font-black py-2 px-3.5 rounded-lg transition-all cursor-pointer shadow-3xs uppercase tracking-wide"
-          >
-            Staff Login
-          </button>
         </div>
       </header>
 
@@ -101,13 +78,13 @@ export default function Login() {
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-emerald-900/40 via-[#0c3127] to-[#0a271f] pointer-events-none" />
           
           {/* Transparent Scales design backdrop background */}
-          <div className="absolute -right-16 -bottom-16 opacity-10 text-emerald-100 select-none pointer-events-none transform rotate-1  2">
+          <div className="absolute -right-16 -bottom-16 opacity-10 text-emerald-100 select-none pointer-events-none transform rotate-12">
             <Scale className="h-96 w-96" />
           </div>
 
           <div className="relative z-10 my-auto max-w-lg space-y-8 py-8 lg:py-16 text-left">
             <div>
-              <span className="border border-white/20 bg-white/5 backdrop-blur-xs text-[10px] font-black uppercase tracking-widest text-emerald-300 py-1.5 px-3.5 rounded-full inline-block">
+              <span className="border border-white/20 bg-white/5 backdrop-blur-xs text-[10px] font-black uppercase tracking-widest text-[#a7f3d0] py-1.5 px-3.5 rounded-full inline-block">
                 OFFICIAL INSTITUTIONAL PORTAL
               </span>
             </div>
@@ -127,41 +104,13 @@ export default function Login() {
             <div className="grid grid-cols-2 gap-8 pt-4">
               <div className="space-y-1.5 text-left">
                 <p className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">100%</p>
-                <p className="text-[10px] text-emerald-300 tracking-wider font-extrabold uppercase">CONFIDENTIAL</p>
+                <p className="text-[10px] text-[#34d399] tracking-wider font-extrabold uppercase">CONFIDENTIAL</p>
               </div>
 
               <div className="space-y-1.5 text-left">
                 <p className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">24hr</p>
-                <p className="text-[10px] text-emerald-300 tracking-wider font-extrabold uppercase">INITIAL RESPONSE</p>
+                <p className="text-[10px] text-[#34d399] tracking-wider font-extrabold uppercase">INITIAL RESPONSE</p>
               </div>
-            </div>
-          </div>
-
-          {/* Quick Demo Pre-Fill Buttons Bar */}
-          <div className="relative z-10 border-t border-emerald-800/40 pt-4 flex flex-col gap-2 bg-[#092921]/60 p-4 rounded-2xl">
-            <span className="text-[9px] font-extrabold text-emerald-350 tracking-wider uppercase inline-flex items-center gap-1">
-              <Info className="h-3 w-3 text-emerald-400" />
-              Easy Testing Quick Credentials Fill:
-            </span>
-            <div className="flex flex-wrap gap-2">
-              <button 
-                onClick={() => handleQuickFill("student")} 
-                className="bg-[#0f4033] hover:bg-[#124e3e] text-emerald-200 border border-emerald-800/50 rounded-lg px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:text-white transition-colors"
-              >
-                Student Demo
-              </button>
-              <button 
-                onClick={() => handleQuickFill("staff")} 
-                className="bg-[#0f4033] hover:bg-[#124e3e] text-emerald-200 border border-emerald-800/50 rounded-lg px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:text-white transition-colors"
-              >
-                Staff Member Demo
-              </button>
-              <button 
-                onClick={() => handleQuickFill("admin")} 
-                className="bg-[#0f4033] hover:bg-[#124e3e] text-emerald-200 border border-emerald-800/50 rounded-lg px-2.5 py-1 text-[10px] font-bold cursor-pointer hover:text-white transition-colors"
-              >
-                System Administrator
-              </button>
             </div>
           </div>
 
@@ -264,7 +213,7 @@ export default function Login() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full bg-[#0c3127] hover:bg-[#0f4033] disabled:opacity-55 text-white font-black text-xs py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm active:scale-98"
+                  className="w-full bg-[#0c3127] hover:bg-[#0f4033] disabled:opacity-55 text-white font-black text-xs py-3.5 px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-all shadow-sm active:scale-98 animate-transition"
                 >
                   <span>{loading ? "Authenticating Account..." : "Login to Portal"}</span>
                   <ArrowRight className="h-4 w-4" />
@@ -280,7 +229,7 @@ export default function Login() {
                 <span className="text-xs text-slate-500 font-semibold">Don't have an account? </span>
                 <Link 
                   to="/register" 
-                  className="text-xs font-black text-[#0c3127] hover:underline"
+                  className="text-xs font-black text-[#0c3127] hover:underline animate-transition"
                 >
                   Register Now
                 </Link>
