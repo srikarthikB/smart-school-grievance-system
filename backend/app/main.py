@@ -1,8 +1,26 @@
+import threading
+import time
+import requests
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import analytics, auth, complaints, feedback, users
 from app.core.config import settings
+
+
+def keep_alive():
+    while True:
+        try:
+            requests.get("https://smart-school-grievance-api.onrender.com/api/health")
+            print("Ping sent")
+        except Exception as e:
+            print(f"Ping failed: {e}")
+
+        time.sleep(600)  # 10 minutes
+
+threading.Thread(target=keep_alive, daemon=True).start()
+
 
 app = FastAPI(
     title="Smart School Grievance Management System API",
