@@ -25,12 +25,17 @@ import {
 } from "lucide-react";
 
 const blank = { name: "", email: "", password: "password123", role: "staff", department: "Academic" };
+const blankStaff = { name: "", email: "", password: "", role: "staff", department: "Academic" };
 
 export default function UserManagement() {
   const { user: currentAdmin } = useAuth();
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(blank);
   const [message, setMessage] = useState("");
+  
+  // Interactive Modal controls for Create Staff Account
+  const [showStaffModal, setShowStaffModal] = useState(false);
+  const [staffForm, setStaffForm] = useState(blankStaff);
   
   // Filter variables mapping to design widgets
   const [searchQuery, setSearchQuery] = useState("");
@@ -66,6 +71,35 @@ export default function UserManagement() {
       load();
     } catch (err) {
       setMessage(err.response?.data?.detail || "Could not create user info");
+    }
+  }
+
+  async function createStaff(e) {
+    e.preventDefault();
+    setMessage("");
+    setSuccessMsg("");
+    
+    // Strict institutional role check: Students must not be able to create staff accounts.
+    if (currentAdmin?.role !== "admin") {
+      setMessage("Access denied: You are not authorized to create staff accounts.");
+      return;
+    }
+
+    try {
+      await api.post("/users", {
+        name: staffForm.name,
+        email: staffForm.email,
+        department: staffForm.department,
+        password: staffForm.password,
+        role: "staff"
+      });
+      setStaffForm(blankStaff);
+      setShowStaffModal(false);
+      setSuccessMsg(`Institution staff account for '${staffForm.name}' created successfully!`);
+      setTimeout(() => setSuccessMsg(""), 4000);
+      load();
+    } catch (err) {
+      setMessage(err.response?.data?.detail || "Could not create staff account.");
     }
   }
 
@@ -191,6 +225,20 @@ export default function UserManagement() {
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   };
 
+  if (currentAdmin?.role !== "admin") {
+    return (
+      <div className="min-h-[50vh] flex flex-col items-center justify-center text-center p-8 bg-white border border-rose-100 rounded-3xl shadow-3xs space-y-4 my-8">
+        <div className="h-16 w-16 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+          <UserX className="h-8 w-8" />
+        </div>
+        <h2 className="text-[#0c3127] text-2xl font-black">Access Unauthorized</h2>
+        <p className="text-slate-500 font-semibold text-sm max-w-sm leading-relaxed">
+          This system portal registry is locked down. Only administrative accounts are authorized to create, update, or audit university staff credentials.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 text-left pb-16 relative">
       
@@ -268,6 +316,19 @@ export default function UserManagement() {
         >
           <Plus className="h-4.5 w-4.5" />
           Add New User
+        </button>
+
+        <button 
+          onClick={() => {
+            setForm(blank);
+            setStaffForm(blankStaff);
+            setShowStaffModal(true);
+            setMessage("");
+          }}
+          className="bg-emerald-800 hover:bg-emerald-950 text-white py-3 px-5 rounded-2xl text-xs font-black tracking-wide inline-flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98"
+        >
+          <Plus className="h-4.5 w-4.5" />
+          Create Staff Account
         </button>
 
         <button 
@@ -660,6 +721,110 @@ export default function UserManagement() {
                   className="px-5 py-2.5 bg-[#0c3127] hover:bg-[#0f4033] rounded-xl text-xs font-black text-white cursor-pointer transition-colors"
                 >
                   Persist Account
+                </button>
+              </div>
+
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* [Create Staff Account] Side overlay modal component */}
+      {showStaffModal && (
+        <div className="fixed inset-0 bg-[#000000]/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl border border-slate-200 max-w-md w-full shadow-2xl overflow-hidden animate-zoom-in">
+            
+            {/* Modal Heading block */}
+            <div className="bg-[#0c3127] text-white px-6 py-5 flex items-center justify-between">
+              <div className="text-left">
+                <span className="text-[10px] text-emerald-300 font-black uppercase tracking-widest block font-bold">Institutional Registry Control</span>
+                <h3 className="text-base font-black text-white">Create Staff Account</h3>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowStaffModal(false);
+                  setMessage("");
+                }}
+                className="p-1 hover:bg-white/10 rounded-xl transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Form inputs content */}
+            <form onSubmit={createStaff} className="p-6 space-y-4 text-left">
+              {message && (
+                <div className="bg-rose-50 border border-rose-100 p-3.5 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{message}</span>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Full Name</label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="e.g. Professor Julian Vance" 
+                  value={staffForm.name} 
+                  onChange={(e) => setStaffForm({ ...staffForm, name: e.target.value })} 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 placeholder-slate-405 focus:outline-none focus:ring-1 focus:ring-[#0c3127]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Email Address</label>
+                <input 
+                  type="email"
+                  required
+                  placeholder="e.g. jvance@university.edu" 
+                  value={staffForm.email} 
+                  onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })} 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 placeholder-slate-405 focus:outline-none focus:ring-1 focus:ring-[#0c3127]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Department</label>
+                <select 
+                  value={staffForm.department} 
+                  onChange={(e) => setStaffForm({ ...staffForm, department: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs font-bold text-slate-705 focus:outline-none cursor-pointer"
+                >
+                  {["Academic", "Discipline", "Infrastructure", "Transport", "Administration"].map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Password</label>
+                <input 
+                  type="password"
+                  required
+                  placeholder="••••••••" 
+                  value={staffForm.password} 
+                  onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 placeholder-slate-450 focus:outline-none focus:ring-1 focus:ring-[#0c3127]"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setShowStaffModal(false);
+                    setMessage("");
+                  }}
+                  className="px-4 py-2.5 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  className="px-5 py-2.5 bg-[#0c3127] hover:bg-[#0f4033] rounded-xl text-xs font-black text-white cursor-pointer transition-colors"
+                >
+                  Create Staff Account
                 </button>
               </div>
 
