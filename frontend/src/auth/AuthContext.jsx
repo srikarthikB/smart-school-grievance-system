@@ -1,3 +1,4 @@
+import React from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 import api from "../api/client";
 
@@ -18,7 +19,10 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function login(email, password) {
+    console.log("LOGIN REQUEST", { email, password }); // <-- ADD
+
     const res = await api.post("/auth/login", { email, password });
+
     localStorage.setItem("token", res.data.access_token);
     localStorage.setItem("user", JSON.stringify(res.data.user));
     setUser(res.data.user);

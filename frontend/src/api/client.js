@@ -1,7 +1,11 @@
 import axios from "axios";
 
+const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+
+console.log("API URL:", BASE_URL); // <-- ADD
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api",
+  baseURL: BASE_URL,
 });
 
 api.interceptors.request.use((config) => {
@@ -9,16 +13,5 @@ api.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("token");
-      localStorage.removeItem("user");
-    }
-    return Promise.reject(error);
-  }
-);
 
 export default api;
