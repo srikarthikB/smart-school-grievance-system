@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+﻿import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/client";
 import { 
@@ -161,7 +161,7 @@ export default function ComplaintManagement() {
     });
   }, [complaints, searchQuery, categoryFilter, statusFilter, priorityFilter, dateFilter]);
 
-  // Export Filtered items CSV simulator
+  // Export Filtered items CSV export
   const handleExportCSV = () => {
     const headers = "CaseID,Student,Category,Priority,Status,Assignee,Date\n";
     const rows = filteredComplaints.map(c => 
@@ -181,70 +181,33 @@ export default function ComplaintManagement() {
 
   // Helper date-format utilities
   function formatDateShort(dateString) {
-    if (!dateString) return "Oct 12, 2024";
+    if (!dateString) return "No date";
     try {
       const d = new Date(dateString);
-      if (isNaN(d.getTime())) return "Oct 12, 2024";
+      if (isNaN(d.getTime())) return "No date";
       return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     } catch {
-      return "Oct 12, 2024";
+      return "No date";
     }
   }
 
   function formatFullDate(dateString) {
-    if (!dateString) return "Oct 12, 2024 • 10:45 AM";
+    if (!dateString) return "No date â€¢ 10:45 AM";
     try {
       const d = new Date(dateString);
-      if (isNaN(d.getTime())) return "Oct 12, 2024 • 10:45 AM";
+      if (isNaN(d.getTime())) return "No date â€¢ 10:45 AM";
       return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + ", " + d.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit"
       });
     } catch {
-      return "Oct 12, 2024 • 10:45 AM";
+      return "No date â€¢ 10:45 AM";
     }
   }
 
-  // Populate dynamic timeline updates matching active complaint
+  // Populate timeline updates from active complaint fields only.
   const activeTimeline = useMemo(() => {
     if (!activeComplaint) return [];
-    
-    // Check fields list
-    if (activeComplaint.id === 89) {
-      return [
-        {
-          title: "Action Required",
-          time: "Today, 2:30 PM",
-          desc: "Dr. Sarah Miller requested student to provide original photographic scan of leaking pipe.",
-          active: true
-        },
-        {
-          title: "Grievance Assigned",
-          time: "Oct 14, 2024",
-          desc: "Case assigned to Academic Head, Dr. Sarah Miller automatically.",
-          active: false
-        }
-      ];
-    }
-
-    if (activeComplaint.id === 81) {
-      return [
-        {
-          title: "Resolved State Achieved",
-          time: "Oct 12, 2024",
-          desc: "Grievance resolved. Hardware team booted PC motherboard rails successfully.",
-          active: true
-        },
-        {
-          title: "Grievance Assigned",
-          time: "Oct 12, 2024",
-          desc: "Assigned to Dean of Operations for urgent support routing.",
-          active: false
-        }
-      ];
-    }
-
-    // Default template log items
     return [
       {
         title: activeComplaint.status || "Status Tracked",
@@ -307,7 +270,7 @@ export default function ComplaintManagement() {
       {/* Split layout structure: table left and drawer on right */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         
-        {/* Main interactive panel: Filters + Table (xl:col-span-8 or 12 depending on selected state) */}
+        {/* Main interactive panel: Filters + Table (xl:col-span-8 or 12 deSubmitted on selected state) */}
         <div className={selectedId ? "xl:col-span-8 space-y-6" : "xl:col-span-12 space-y-6"}>
           
           {/* Filters card */}
@@ -354,7 +317,7 @@ export default function ComplaintManagement() {
                   className="bg-slate-50 border border-slate-150 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-600 cursor-pointer"
                 >
                   <option value="All">All Statuses</option>
-                  {["Submitted", "Under Review", "In Progress", "Action Required", "Resolved", "Rejected"].map(s => (
+                  {["Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map(s => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
@@ -369,7 +332,7 @@ export default function ComplaintManagement() {
                   className="bg-slate-50 border border-slate-150 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-600 cursor-pointer"
                 >
                   <option value="All">All Priorities</option>
-                  {["Low", "Medium", "High", "Urgent"].map(p => (
+                  {["Low", "Medium", "High"].map(p => (
                     <option key={p} value={p}>{p}</option>
                   ))}
                 </select>
@@ -435,7 +398,7 @@ export default function ComplaintManagement() {
 
                     // Priority styling config
                     let priorityBadge = "bg-emerald-50 text-emerald-800 border-emerald-100";
-                    if (c.priority === "High" || c.priority === "Urgent") {
+                    if (c.priority === "High") {
                       priorityBadge = "bg-rose-50 text-rose-800 border-rose-150 font-black uppercase";
                     } else if (c.priority === "Medium") {
                       priorityBadge = "bg-amber-50 text-amber-800 border-amber-150 font-black uppercase";
@@ -443,7 +406,7 @@ export default function ComplaintManagement() {
 
                     // Status style config
                     let statusBadge = "bg-slate-100 text-slate-700 border-slate-205";
-                    if (c.status === "Action Required") {
+                    if (c.status === "In Progress") {
                       statusBadge = "bg-red-50 text-red-800 border-red-150 font-black";
                     } else if (c.status === "Under Review") {
                       statusBadge = "bg-indigo-50 text-indigo-805 border-indigo-150 font-black";
@@ -465,7 +428,7 @@ export default function ComplaintManagement() {
                           <span className="text-xs font-black text-slate-800">#GRV-{c.id}</span>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
-                          <span className="text-xs text-slate-800 font-extrabold">{c.creator?.name || "Karthik"}</span>
+                          <span className="text-xs text-slate-800 font-extrabold">{c.creator?.name || "Anonymous"}</span>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
                           <span className="text-xs text-slate-500 font-semibold">{c.category || "Academic"}</span>
@@ -542,7 +505,7 @@ export default function ComplaintManagement() {
                     onChange={(e) => setDrawerStatus(e.target.value)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-700 cursor-pointer"
                   >
-                    {["Submitted", "Under Review", "In Progress", "Action Required", "Resolved", "Rejected"].map(s => (
+                    {["Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -623,7 +586,7 @@ export default function ComplaintManagement() {
                   <div className="flex items-center gap-2.5 min-w-0">
                     <FileText className="h-4 w-4 text-emerald-800 shrink-0" />
                     <span className="text-xs text-slate-700 font-extrabold underline truncate hover:text-[#064e3b] cursor-pointer" onClick={() => alert("Reviewing attached marking schemes files logs...")}>
-                      {activeComplaint.id === 89 ? "leaking_pipe_photo.jpg" : "MA302_Exam_Marking_Sheet.pdf"}
+                      Attachment data unavailable
                     </span>
                   </div>
                   <Download className="h-3.5 w-3.5 text-slate-400 hover:text-emerald-800 cursor-pointer" onClick={() => alert("Downloading raw file archives elements...")} />
@@ -679,3 +642,5 @@ export default function ComplaintManagement() {
     </div>
   );
 }
+
+

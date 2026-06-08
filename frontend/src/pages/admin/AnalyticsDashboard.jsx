@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+﻿import React, { useEffect, useState, useMemo } from "react";
 import api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext.jsx";
 import { 
@@ -30,29 +30,60 @@ export default function AnalyticsDashboard() {
   const [complaints, setComplaints] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusNotification, setStatusNotification] = useState("");
+  const [loading, setLoading] = useState(true);
 
   function load() {
-    // Keep existing API calls
-    api.get("/analytics").then((res) => setAnalytics(res.data));
-    api.get("/complaints").then((res) => setComplaints(res.data));
+    setLoading(true);
+    Promise.all([
+      api.get("/analytics"),
+      api.get("/complaints"),
+    ])
+      .then(([analyticsRes, complaintsRes]) => {
+        setAnalytics(analyticsRes.data);
+        setComplaints(complaintsRes.data || []);
+      })
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => {
     load();
   }, []);
 
-  // Compute stats calculations safely with sensible fallbacks
+  const categoryBuckets = useMemo(() => {
+    if (analytics?.complaints_by_category?.length) return analytics.complaints_by_category;
+    const counts = complaints.reduce((acc, complaint) => {
+      const key = complaint.category || "Uncategorized";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
+  }, [analytics, complaints]);
+
+  const statusBuckets = useMemo(() => {
+    if (analytics?.complaints_by_status?.length) return analytics.complaints_by_status;
+    const counts = complaints.reduce((acc, complaint) => {
+      const key = complaint.status || "Unknown";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
+  }, [analytics, complaints]);
+
   const stats = useMemo(() => {
-    const total = analytics?.total_complaints || complaints.length || 1284;
-    const rate = analytics?.resolution_rate || 94;
-    
-    // Sensible calculations based on available data
-    const active = complaints.filter(c => c.status !== "Resolved" && c.status !== "Rejected").length || 156;
-    const avgResponse = "2.4"; // dynamic response metric representation matched to design
+    const total = analytics?.total_complaints ?? complaints.length;
+    const rate = analytics?.resolution_rate ?? 0;
+    const active = complaints.filter(c => c.status !== "Resolved" && c.status !== "Rejected").length;
+    const resolvedDurations = complaints
+      .filter((c) => c.status === "Resolved" && c.created_at && c.updated_at)
+      .map((c) => new Date(c.updated_at).getTime() - new Date(c.created_at).getTime())
+      .filter((ms) => Number.isFinite(ms) && ms >= 0);
+    const avgResponse = resolvedDurations.length
+      ? (resolvedDurations.reduce((sum, ms) => sum + ms, 0) / resolvedDurations.length / 86400000).toFixed(1)
+      : "0";
 
     return {
-      total: total > 100 ? total : 1284,
-      rate: rate || 94,
+      total,
+      rate,
       avgResponse,
       active
     };
@@ -73,18 +104,39 @@ export default function AnalyticsDashboard() {
     }, 1000);
   };
 
-  // Search filter implementation matching "Institutional search elements"
-  const filteredDepartments = useMemo(() => {
-    const rawDepts = [
-      { name: "Registrar's Office", cases: 412, response: "1.8 days", status: "Excellent", efficiency: 88, color: "bg-emerald-600" },
-      { name: "Facilities & Maintenance", cases: 285, response: "2.5 days", status: "Standard", efficiency: 72, color: "bg-emerald-800" },
-      { name: "Housing Services", cases: 198, response: "4.2 days", status: "Review Needed", efficiency: 45, color: "bg-rose-600" },
-      { name: "Financial Aid", cases: 389, response: "2.1 days", status: "Above Target", efficiency: 80, color: "bg-emerald-700" }
-    ];
+  const monthlyBuckets = useMemo(() => {
+    const labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const counts = labels.map((label, month) => ({
+      label,
+      val: complaints.filter((complaint) => {
+        const date = new Date(complaint.created_at);
+        return Number.isFinite(date.getTime()) && date.getMonth() === month;
+      }).length,
+    }));
+    const max = Math.max(...counts.map((item) => item.val), 1);
+    return counts.map((item) => ({ ...item, height: `${(item.val / max) * 100}%`, active: item.val === max && max > 0 }));
+  }, [complaints]);
 
-    if (!searchQuery) return rawDepts;
-    return rawDepts.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [searchQuery]);
+  const filteredDepartments = useMemo(() => {
+    const rows = categoryBuckets.map((bucket) => {
+      const categoryComplaints = complaints.filter((c) => (c.category || "Uncategorized") === bucket.name);
+      const resolvedCount = categoryComplaints.filter((c) => c.status === "Resolved").length;
+      const efficiency = bucket.count ? Math.round((resolvedCount / bucket.count) * 100) : 0;
+      return {
+        name: bucket.name,
+        cases: bucket.count,
+        response: `${efficiency}% resolved`,
+        status: bucket.count ? "Tracked" : "No cases",
+        efficiency,
+        color: efficiency >= 75 ? "bg-emerald-600" : efficiency >= 40 ? "bg-amber-500" : "bg-slate-400"
+      };
+    });
+    if (!searchQuery) return rows;
+    return rows.filter(d => d.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  }, [categoryBuckets, complaints, searchQuery, stats.total]);
+
+  const highPriorityCount = complaints.filter((c) => c.priority === "High" && c.status !== "Resolved" && c.status !== "Rejected").length;
+  const standardCount = complaints.filter((c) => c.priority !== "High" && c.status !== "Resolved" && c.status !== "Rejected").length;
 
   return (
     <div className="space-y-8 text-left pb-16 relative">
@@ -120,13 +172,13 @@ export default function AnalyticsDashboard() {
           {/* Provost profile identity header info */}
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block">
-              <span className="text-xs font-black text-slate-800 block">Dr. Sarah Jenkins</span>
+              <span className="text-xs font-black text-slate-800 block">{user?.name || "Admin"}</span>
               <span className="text-[10px] text-slate-450 font-semibold block mt-0.5">
-                University Provost
+                Administrator
               </span>
             </div>
             <div className="h-10 w-10 rounded-full bg-emerald-950 text-white font-extrabold flex items-center justify-center ring-2 ring-emerald-100 text-sm">
-              {getInitials(user?.name || "Sarah Jenkins")}
+              {getInitials(user?.name || "Admin")}
             </div>
           </div>
         </div>
@@ -187,7 +239,7 @@ export default function AnalyticsDashboard() {
             </p>
             <div className="flex items-center gap-1 mt-2 text-[10px] text-emerald-600 font-black">
               <ArrowUpRight className="h-3 w-3" />
-              <span>8% VS LAST YEAR</span>
+              <span>{loading ? "LOADING" : "LIVE API DATA"}</span>
             </div>
           </div>
         </div>
@@ -223,7 +275,7 @@ export default function AnalyticsDashboard() {
               {stats.avgResponse} days
             </p>
             <div className="flex items-center gap-1 mt-2 text-[10px] text-slate-500 font-bold">
-              <span>-0.5 days since last month</span>
+              <span>Calculated from resolved complaints</span>
             </div>
           </div>
         </div>
@@ -241,7 +293,7 @@ export default function AnalyticsDashboard() {
               {stats.active}
             </p>
             <div className="flex items-center gap-1 mt-2 text-[10px] text-rose-600 font-black uppercase">
-              <span>12 cases past SLA</span>
+              <span>{stats.active ? "Open from current data" : "No active cases"}</span>
             </div>
           </div>
         </div>
@@ -279,26 +331,13 @@ export default function AnalyticsDashboard() {
 
             {/* Horizontal timeline of calendar bars */}
             <div className="relative z-10 flex justify-between h-44 items-end px-2 gap-1.5 sm:gap-3">
-              {[
-                { label: "Jan", val: 56, active: false },
-                { label: "Feb", val: 98, active: false },
-                { label: "Mar", val: 120, active: false },
-                { label: "Apr", val: 85, active: false },
-                { label: "May", val: 45, active: false },
-                { label: "Jun", val: 32, active: false },
-                { label: "Jul", val: 64, active: false },
-                { label: "Aug", val: 78, active: false },
-                { label: "Sep", val: 92, active: false },
-                { label: "Oct", val: 145, active: true },
-                { label: "Nov", val: 110, active: false },
-                { label: "Dec", val: 85, active: false }
-              ].map((m, i) => (
+              {monthlyBuckets.map((m, i) => (
                 <div key={i} className="flex flex-col items-center gap-1.5 flex-1 group">
                   <div className="relative w-full max-w-[28px] bg-slate-50/50 border border-slate-100/80 rounded-t-lg h-36 flex items-end overflow-hidden">
                     <div 
                       className={`w-full rounded-t-md transition-all duration-500 group-hover:opacity-90 
                         ${m.active ? "bg-emerald-850" : "bg-[#0c3127]/25"}`}
-                      style={{ height: `${(m.val / 160) * 100}%` }}
+                      style={{ height: m.height }}
                     />
                   </div>
                   <span className={`text-[10px] font-black uppercase tracking-wider
@@ -317,58 +356,53 @@ export default function AnalyticsDashboard() {
             <strong className="text-base text-slate-800 font-black">Distribution by Category</strong>
           </div>
 
-          {/* Simple design donut circle */}
+          {/* Category distribution */}
           <div className="relative flex items-center justify-center py-5">
             <svg width="150" height="150" className="transform -rotate-90">
-              {/* Outer stroke background track */}
               <circle cx="75" cy="75" r="55" fill="transparent" stroke="#f1f5f9" strokeWidth="16" />
-              
-              {/* Pie/Ring sectors */}
-              <circle cx="75" cy="75" r="55" fill="transparent" stroke="#0c3127" strokeWidth="16" strokeDasharray="345" strokeDashoffset="155" />
-              <circle cx="75" cy="75" r="55" fill="transparent" stroke="#059669" strokeWidth="16" strokeDasharray="345" strokeDashoffset="280" />
-              <circle cx="75" cy="75" r="55" fill="transparent" stroke="#f59e0b" strokeWidth="16" strokeDasharray="345" strokeDashoffset="315" />
+              {categoryBuckets.slice(0, 4).map((bucket, index) => {
+                const circumference = 345;
+                const ratio = stats.total ? bucket.count / stats.total : 0;
+                const dash = `${Math.max(ratio * circumference, 0)} ${circumference}`;
+                const offset = -categoryBuckets.slice(0, index).reduce((sum, item) => sum + (stats.total ? item.count / stats.total : 0) * circumference, 0);
+                const colors = ["#0c3127", "#059669", "#34d399", "#cbd5e1"];
+                return (
+                  <circle
+                    key={bucket.name}
+                    cx="75"
+                    cy="75"
+                    r="55"
+                    fill="transparent"
+                    stroke={colors[index]}
+                    strokeWidth="16"
+                    strokeDasharray={dash}
+                    strokeDashoffset={offset}
+                  />
+                );
+              })}
             </svg>
-            
-            {/* Label in inside the center ring */}
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-              <strong className="text-xl font-black text-slate-800 tracking-tight">1.2k</strong>
+              <strong className="text-xl font-black text-slate-800 tracking-tight">{stats.total}</strong>
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Total</span>
             </div>
           </div>
 
-          {/* Custom legend grid mapping precisely to screenshot parameters */}
           <div className="grid grid-cols-2 gap-4 text-left mt-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-[#0c3127]" />
-                <span className="text-[11px] font-bold text-slate-500">Academic</span>
-              </div>
-              <strong className="text-sm font-black text-slate-800 block pl-3.5">45%</strong>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-600" />
-                <span className="text-[11px] font-bold text-slate-500">Facilities</span>
-              </div>
-              <strong className="text-sm font-black text-slate-800 block pl-3.5">25%</strong>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                <span className="text-[11px] font-bold text-slate-500">Admin</span>
-              </div>
-              <strong className="text-sm font-black text-slate-800 block pl-3.5">20%</strong>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-slate-300" />
-                <span className="text-[11px] font-bold text-slate-500">Other</span>
-              </div>
-              <strong className="text-sm font-black text-slate-800 block pl-3.5">10%</strong>
-            </div>
+            {categoryBuckets.length > 0 ? categoryBuckets.slice(0, 4).map((bucket, index) => {
+              const colors = ["bg-[#0c3127]", "bg-emerald-600", "bg-emerald-400", "bg-slate-300"];
+              const percent = stats.total ? Math.round((bucket.count / stats.total) * 100) : 0;
+              return (
+                <div className="space-y-1" key={bucket.name}>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`h-2 w-2 rounded-full ${colors[index]}`} />
+                    <span className="text-[11px] font-bold text-slate-500">{bucket.name}</span>
+                  </div>
+                  <strong className="text-sm font-black text-slate-800 block pl-3.5">{percent}%</strong>
+                </div>
+              );
+            }) : (
+              <p className="col-span-2 text-xs text-slate-400 font-semibold text-center">No category data yet.</p>
+            )}
           </div>
 
         </div>
@@ -451,22 +485,22 @@ export default function AnalyticsDashboard() {
 
             <div className="space-y-3.5">
               
-              {/* Urgent tracker card */}
+              {/* High priority card */}
               <div className="border-l-4 border-l-rose-600 bg-rose-50/30 rounded-2xl p-4 flex items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-black uppercase text-rose-800 tracking-wider block">Urgent</span>
+                  <span className="text-[10px] font-black uppercase text-rose-800 tracking-wider block">High</span>
                   <p className="text-[11px] text-slate-500 font-medium">Requires action within 24hrs</p>
                 </div>
-                <strong className="text-2xl font-black text-rose-800">84</strong>
+                <strong className="text-2xl font-black text-rose-800">{highPriorityCount}</strong>
               </div>
 
-              {/* Routine tracker card */}
+              {/* Standard priority card */}
               <div className="border-l-4 border-l-slate-400 bg-slate-50/50 rounded-2xl p-4 flex items-center justify-between gap-4">
                 <div className="space-y-1">
-                  <span className="text-[10px] font-black uppercase text-slate-705 tracking-wider block">Routine</span>
+                  <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider block">Standard</span>
                   <p className="text-[11px] text-slate-500 font-medium">Within standard 5-day SLA</p>
                 </div>
-                <strong className="text-2xl font-black text-slate-800">1,200</strong>
+                <strong className="text-2xl font-black text-slate-800">{StandardCount}</strong>
               </div>
 
             </div>
@@ -474,11 +508,18 @@ export default function AnalyticsDashboard() {
             {/* Backlog ratio linear indicator */}
             <div className="space-y-1.5 pt-2">
               <div className="flex items-center justify-between text-[11px] font-bold text-slate-500">
-                <span>Action required (Backlog)</span>
-                <span className="text-slate-800 font-extrabold">12%</span>
+                <span>In Progress (Backlog)</span>
+                <span className="text-slate-800 font-extrabold">
+                  {stats.total ? Math.round((statusBuckets.find((item) => item.name === "In Progress")?.count || 0) / stats.total * 100) : 0}%
+                </span>
               </div>
               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-slate-800 rounded-full" style={{ width: "12%" }} />
+                <div
+                  className="h-full bg-slate-800 rounded-full"
+                  style={{
+                    width: `${stats.total ? Math.round((statusBuckets.find((item) => item.name === "In Progress")?.count || 0) / stats.total * 100) : 0}%`
+                  }}
+                />
               </div>
             </div>
 
@@ -514,7 +555,7 @@ export default function AnalyticsDashboard() {
 
       {/* Corporate Styled footer elements */}
       <div className="border-t border-slate-100 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-slate-400">
-        <span>© 2024 University Institutional Oversight. All data processed per privacy guidelines.</span>
+        <span>Â© 2024 University Institutional Oversight. All data processed per privacy guidelines.</span>
         <div className="flex items-center gap-5">
           <button className="hover:text-emerald-800 cursor-pointer" onClick={() => alert("Privacy policy page link...")}>Privacy Policy</button>
           <button className="hover:text-emerald-800 cursor-pointer" onClick={() => alert("Audit logs system parameter...")}>Audit Logs</button>
@@ -525,3 +566,5 @@ export default function AnalyticsDashboard() {
     </div>
   );
 }
+
+

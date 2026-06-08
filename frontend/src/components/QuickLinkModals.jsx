@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { X, FileText, ShieldAlert, HelpCircle } from "lucide-react";
 
 export default function QuickLinkModals({ activeModal, onClose }) {
@@ -63,7 +63,7 @@ export default function QuickLinkModals({ activeModal, onClose }) {
 
                 <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
                   <p className="font-semibold text-emerald-800 text-xs uppercase tracking-wide">3. Timeline &amp; Resolution</p>
-                  <p className="text-xs text-slate-600 mt-1">We maintain an average response and assessment period of 4.2 business days. Resolved grievances are open to student feedback loops for 14 continuous days.</p>
+                  <p className="text-xs text-slate-600 mt-1">We maintain an average response and assessment period of backend-reported resolution time. Resolved grievances are open to student feedback loops for 14 continuous days.</p>
                 </div>
               </div>
               <p className="text-xs text-slate-400 mt-4 italic text-center">Institution Board Charter Document. Approved for academic session 2026-2027.</p>
@@ -144,3 +144,4 @@ export default function QuickLinkModals({ activeModal, onClose }) {
     </div>
   );
 }
+

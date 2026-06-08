@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+﻿import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext.jsx";
@@ -25,16 +25,23 @@ import {
 
 export default function AdminDashboard() {
   const { user } = useAuth();
-  const [analytics, setAnalytics] = useState(null);
   const [complaints, setComplaints] = useState([]);
   const [users, setUsers] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [trendTab, setTrendTab] = useState("Weekly");
+  const [loading, setLoading] = useState(true);
 
   function load() {
-    api.get("/analytics").then((res) => setAnalytics(res.data));
-    api.get("/complaints").then((res) => setComplaints(res.data));
-    api.get("/users").then((res) => setUsers(res.data));
+    setLoading(true);
+    Promise.all([
+      api.get("/complaints"),
+      api.get("/users"),
+    ])
+      .then(([complaintsRes, usersRes]) => {
+        setComplaints(complaintsRes.data || []);
+        setUsers(usersRes.data || []);
+      })
+      .finally(() => setLoading(false));
   }
 
   useEffect(() => {
@@ -43,21 +50,56 @@ export default function AdminDashboard() {
 
   // Compute stats dynamically to mirror live data
   const stats = useMemo(() => {
-    const total = complaints.length || 3;
+    const total = complaints.length;
     const resolved = complaints.filter((c) => c.status === "Resolved").length;
-    const pending = complaints.filter((c) => c.status !== "Resolved" && c.status !== "Rejected").length;
-    const rate = total ? Math.round((resolved / total) * 100) : 94;
+    const Submitted = complaints.filter((c) => c.status !== "Resolved" && c.status !== "Rejected").length;
+    const rate = total ? Math.round((resolved / total) * 100) : 0;
     const highPriority = complaints.filter((c) => c.priority === "High" && c.status !== "Resolved").length;
+    const resolvedDurations = complaints
+      .filter((c) => c.status === "Resolved" && c.created_at && c.updated_at)
+      .map((c) => new Date(c.updated_at).getTime() - new Date(c.created_at).getTime())
+      .filter((ms) => Number.isFinite(ms) && ms >= 0);
+    const avgResolution = resolvedDurations.length
+      ? (resolvedDurations.reduce((sum, ms) => sum + ms, 0) / resolvedDurations.length / 86400000).toFixed(1)
+      : "0";
 
     return {
       total,
       resolved,
-      pending: complaints.length ? pending : 12,
-      immediate: complaints.length ? highPriority : 8,
-      rate: rate || 94,
+      Submitted,
+      immediate: highPriority,
+      rate,
+      avgResolution,
       volume: total > 10 ? "High" : total > 4 ? "Moderate" : "Low"
     };
   }, [complaints]);
+
+  const weeklyBuckets = useMemo(() => {
+    const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const counts = labels.map((day, index) => ({
+      day,
+      count: complaints.filter((complaint) => {
+        const date = new Date(complaint.created_at);
+        return Number.isFinite(date.getTime()) && date.getDay() === index;
+      }).length,
+    }));
+    const max = Math.max(...counts.map((item) => item.count), 1);
+    return counts.map((item) => ({ ...item, height: `${(item.count / max) * 100}%`, active: item.count === max && max > 0 }));
+  }, [complaints]);
+
+  const categoryBuckets = useMemo(() => {
+    const counts = complaints.reduce((acc, complaint) => {
+      const key = complaint.category || "Uncategorized";
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(counts).map(([name, count]) => ({ name, count }));
+  }, [complaints]);
+
+  const SubmittedActions = useMemo(
+    () => complaints.filter((c) => c.priority === "High" && c.status !== "Resolved" && c.status !== "Rejected").slice(0, 3),
+    [complaints]
+  );
 
   // Handle Search Filtering
   const filteredComplaints = useMemo(() => {
@@ -145,24 +187,24 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="mt-4">
-            <p className="text-3xl font-black tracking-tight text-slate-800">4.2 Days</p>
+            <p className="text-3xl font-black tracking-tight text-slate-800">{stats.avgResolution} Days</p>
             <div className="flex items-center gap-1.5 mt-2.5 text-[10px] text-emerald-600 font-black">
               <TrendingDown className="h-3 w-3" />
-              <span>12% FROM LAST MONTH</span>
+              <span>{loading ? "LOADING" : "RESOLVED CASES"}</span>
             </div>
           </div>
         </div>
 
-        {/* Card 2: Pending Grievances */}
+        {/* Card 2: Submitted Grievances */}
         <div className="bg-white rounded-3xl border border-slate-200/60 p-6 flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:border-slate-300/85 transition-all duration-300">
           <div className="flex items-center justify-between gap-4">
-            <span className="text-[11px] text-slate-400 font-extrabold uppercase tracking-wider block">Pending Grievances</span>
+            <span className="text-[11px] text-slate-400 font-extrabold uppercase tracking-wider block">Submitted Grievances</span>
             <div className="h-8 w-8 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center border border-rose-100/50 group-hover:bg-rose-100/40 transition-colors">
               <ClipboardList className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-4">
-            <p className="text-3xl font-black tracking-tight text-slate-800">{stats.pending}</p>
+            <p className="text-3xl font-black tracking-tight text-slate-800">{stats.Submitted}</p>
             <div className="flex items-center gap-1.5 mt-2.5 text-[10px] text-rose-600 font-black">
               <AlertCircle className="h-3 w-3" />
               <span>{stats.immediate} REQUIRING IMMEDIATE ATTENTION</span>
@@ -215,7 +257,7 @@ export default function AdminDashboard() {
 
       </div>
 
-      {/* Main Column Split: Trends Chart & Pending actions Sidebar */}
+      {/* Main Column Split: Trends Chart & Submitted actions Sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
         {/* Left trends graph panel */}
@@ -257,15 +299,7 @@ export default function AdminDashboard() {
 
             {/* Horizontal day columns */}
             <div className="relative z-10 flex justify-between h-40 items-end px-2">
-              {[
-                { day: "Mon", height: "35%", active: false },
-                { day: "Tue", height: "55%", active: false },
-                { day: "Wed", height: "45%", active: false },
-                { day: "Thu", height: "30%", active: false },
-                { day: "Fri", height: "80%", active: true },
-                { day: "Sat", height: "20%", active: false },
-                { day: "Sun", height: "15%", active: false },
-              ].map((bar, i) => (
+              {weeklyBuckets.map((bar, i) => (
                 <div key={i} className="flex flex-col items-center gap-2 group w-full">
                   <div className="relative w-7 bg-slate-50 border border-slate-100/60 rounded-t-xl h-36 flex items-end overflow-hidden">
                     <div 
@@ -282,120 +316,62 @@ export default function AdminDashboard() {
           </div>
 
           <div className="border-t border-slate-100 pt-5 grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                <span>Plagiarism Issues</span>
-                <span className="text-slate-850 font-extrabold">42%</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-slate-800 rounded-full" style={{ width: "42%" }} />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                <span>Exam Conduct</span>
-                <span className="text-slate-850 font-extrabold">28%</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-slate-600 rounded-full" style={{ width: "28%" }} />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                <span>AI Misuse Reports</span>
-                <span className="text-slate-850 font-extrabold">20%</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-600 rounded-full" style={{ width: "20%" }} />
-              </div>
-            </div>
+            {categoryBuckets.length > 0 ? categoryBuckets.slice(0, 3).map((bucket, index) => {
+              const percent = stats.total ? Math.round((bucket.count / stats.total) * 100) : 0;
+              const colors = ["bg-slate-800", "bg-slate-600", "bg-emerald-600"];
+              return (
+                <div className="space-y-2" key={bucket.name}>
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                    <span>{bucket.name}</span>
+                    <span className="text-slate-850 font-extrabold">{percent}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${colors[index]}`} style={{ width: `${percent}%` }} />
+                  </div>
+                </div>
+              );
+            }) : (
+              <p className="md:col-span-3 text-xs text-slate-400 font-semibold text-center">No category data yet.</p>
+            )}
           </div>
         </div>
 
-        {/* Right sidebar Pending Actions panel */}
+        {/* Right sidebar Submitted Actions panel */}
         <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/60 p-6 flex flex-col gap-5 shadow-2xs">
           <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
             <ClipboardList className="h-4.5 w-4.5 text-emerald-800" />
-            <strong className="text-base text-slate-800 font-black">Pending Actions</strong>
+            <strong className="text-base text-slate-800 font-black">Submitted Actions</strong>
           </div>
 
-          {/* List of high fidelity timeline action cards */}
           <div className="flex flex-col gap-4">
-            
-            {/* Card 1 */}
-            <div className="bg-white border border-slate-150 rounded-2xl p-4 flex flex-col gap-3 hover:border-emerald-700/30 transition-all duration-200">
-              <div className="flex items-center justify-between gap-2.5">
-                <span className="bg-rose-50 text-rose-800 border border-rose-100 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg">
-                  High Priority
-                </span>
-                <span className="text-rose-600 font-black text-[9px] uppercase">
-                  Due Today
-                </span>
-              </div>
-              <div className="space-y-1">
-                <h4 className="text-xs font-extrabold text-slate-800">Final review for Jane Doe</h4>
-                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                  Review evidence submission for Case #G-8821 regarding plagiarism allegations.
-                </p>
-              </div>
-              <div className="flex items-center justify-between border-t border-slate-100/60 pt-2.5 mt-1">
-                <div className="flex items-center -space-x-2">
-                  <div className="h-6 w-6 rounded-full bg-slate-900 border border-white text-white text-[8px] font-bold flex items-center justify-center">JD</div>
-                  <div className="h-6 w-6 rounded-full bg-emerald-800 border border-white text-white text-[8px] font-bold flex items-center justify-center">AO</div>
-                  <div className="h-6 w-6 rounded-full bg-slate-100 border border-white text-slate-400 text-[8px] font-bold flex items-center justify-center">+2</div>
+            {SubmittedActions.length > 0 ? SubmittedActions.map((complaint) => (
+              <div key={complaint.id} className="bg-white border border-slate-150 rounded-2xl p-4 flex flex-col gap-3 hover:border-emerald-700/30 transition-all duration-200">
+                <div className="flex items-center justify-between gap-2.5">
+                  <span className="bg-rose-50 text-rose-800 border border-rose-100 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg">
+                    High Priority
+                  </span>
+                  <span className="text-slate-400 font-black text-[9px] uppercase">
+                    #{complaint.id}
+                  </span>
                 </div>
-                <Link to="/admin/complaints" className="h-6 w-6 text-slate-400 hover:text-emerald-700 flex items-center justify-center rounded-lg hover:bg-slate-50">
-                  <ChevronRight className="h-4 w-4" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Card 2 */}
-            <div className="bg-white border border-slate-150 rounded-2xl p-4 flex flex-col gap-3 hover:border-emerald-700/30 transition-all duration-200">
-              <div className="flex items-center justify-between gap-2.5">
-                <span className="bg-slate-100 text-slate-700 border border-slate-150 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg">
-                  Scheduled
-                </span>
-                <span className="text-slate-500 font-black text-[9px] uppercase">
-                  Tomorrow
-                </span>
-              </div>
-              <div className="space-y-1">
-                <h4 className="text-xs font-extrabold text-slate-800">Conduct Hearing: Mark Smith</h4>
-                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                  Formal disciplinary hearing scheduled in Conference Room B at 10:00 AM.
-                </p>
-              </div>
-              <div className="flex items-center justify-between border-t border-slate-100/60 pt-2.5 mt-1">
-                <div className="flex items-center">
-                  <div className="h-6 w-6 rounded-full bg-emerald-800 border border-white text-white text-[8px] font-extrabold flex items-center justify-center">MS</div>
-                  <span className="text-[10px] text-slate-600 font-black ml-2">Mark Smith</span>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-extrabold text-slate-800">{complaint.title}</h4>
+                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                    {complaint.status || "Submitted"} Â· {complaint.category || "Uncategorized"}
+                  </p>
                 </div>
-                <Link to="/admin/complaints" className="h-6 w-6 text-slate-400 hover:text-emerald-700 flex items-center justify-center rounded-lg hover:bg-slate-50">
-                  <ChevronRight className="h-4 w-4" />
-                </Link>
+                <div className="flex items-center justify-end border-t border-slate-100/60 pt-2.5 mt-1">
+                  <Link to={`/complaints/${complaint.id}`} className="h-6 w-6 text-slate-400 hover:text-emerald-700 flex items-center justify-center rounded-lg hover:bg-slate-50">
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
+                </div>
               </div>
-            </div>
-
-            {/* Card 3 */}
-            <div className="bg-white border border-slate-150 rounded-2xl p-4 flex flex-col gap-2.5">
-              <div className="flex items-center justify-between gap-2.5">
-                <span className="bg-slate-100 text-slate-600 border border-slate-150 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-lg">
-                  Routine
-                </span>
-                <span className="text-slate-400 font-bold text-[9px] uppercase">
-                  Oct 24
-                </span>
+            )) : (
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center">
+                <p className="text-xs font-extrabold text-slate-800">No Submitted high-priority actions</p>
+                <p className="text-[11px] text-slate-400 font-semibold mt-1">New high-priority open complaints will appear here.</p>
               </div>
-              <div className="space-y-1">
-                <h4 className="text-xs font-extrabold text-slate-800">Update Policy Documentation</h4>
-                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                  Review new AI integration guidelines for student handbook update.
-                </p>
-              </div>
-            </div>
+            )}
 
           </div>
 
@@ -450,7 +426,7 @@ export default function AdminDashboard() {
               <tbody className="divide-y divide-slate-100">
                 {filteredComplaints.slice(0, 5).map((c) => {
                   let badgeStyle = "bg-slate-50 text-slate-700 border-slate-200";
-                  if (c.status === "Action Required" || c.status === "Urgent") {
+                  if (c.status === "In Progress" || c.status === "High") {
                     badgeStyle = "bg-rose-50 text-rose-800 border-rose-150 font-bold";
                   } else if (c.status === "Resolved") {
                     badgeStyle = "bg-emerald-50 text-emerald-800 border-emerald-150 font-bold";

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext.jsx";
@@ -34,13 +34,9 @@ export default function ComplaintDetails() {
   const [notes, setNotes] = useState("");
   const [message, setMessage] = useState("");
 
-  // Visual/Mock state management
   const [chatMessage, setChatMessage] = useState("");
   const [customMessages, setCustomMessages] = useState([]);
-  const [attachments, setAttachments] = useState([
-    { name: "leaking_pipe_photo.jpg", size: "2.4 MB", type: "Image" },
-    { name: "maintenance_request_log.pdf", size: "450 KB", type: "PDF Document" }
-  ]);
+  const [attachments, setAttachments] = useState([]);
 
   function load() {
     api.get(`/complaints/${id}`).then((res) => {
@@ -85,20 +81,6 @@ export default function ComplaintDetails() {
     setChatMessage("");
   };
 
-  // Simulated adding files to attachments
-  const uploadDummyAttachment = () => {
-    const fileOptions = [
-      { name: "room_inspection_record.pdf", size: "1.1 MB", type: "PDF Document" },
-      { name: "corridor_video_clipping.mp4", size: "5.8 MB", type: "Video" },
-      { name: "repaired_valve_photo.png", size: "890 KB", type: "Image" }
-    ];
-    const randomFile = fileOptions[Math.floor(Math.random() * fileOptions.length)];
-    // Quick duplicate avoidance
-    if (!attachments.some(a => a.name === randomFile.name)) {
-      setAttachments([...attachments, randomFile]);
-    }
-  };
-
   if (!complaint) {
     return (
       <div className="max-w-7xl mx-auto py-24 text-center">
@@ -109,12 +91,12 @@ export default function ComplaintDetails() {
   }
 
   // Formatting date/time beautifully
-  const formatFullDate = (dateString, dfl = "Oct 12, 2024") => {
+  const formatFullDate = (dateString, dfl = "No date") => {
     if (!dateString) return dfl;
     try {
       const d = new Date(dateString);
       if (isNaN(d.getTime())) return dfl;
-      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + " • " + d.toLocaleTimeString("en-US", {
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + " â€¢ " + d.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: " 2-digit",
         hour12: true
@@ -124,7 +106,7 @@ export default function ComplaintDetails() {
     }
   };
 
-  const getDayOnlyStr = (dateString, dfl = "OCT 12, 2024") => {
+  const getDayOnlyStr = (dateString, dfl = "NO DATE") => {
     if (!dateString) return dfl;
     try {
       const d = new Date(dateString);
@@ -141,8 +123,8 @@ export default function ComplaintDetails() {
     if (current === "resolved") {
       return { index: 4, label: "Resolved" };
     }
-    if (current === "action required" || current === "in progress") {
-      return { index: 3, label: "Action Required" };
+    if (current === "in progress") {
+      return { index: 3, label: "In Progress" };
     }
     if (current === "under review" || current === "review") {
       return { index: 2, label: "Under Review" };
@@ -151,6 +133,7 @@ export default function ComplaintDetails() {
   };
 
   const statusProgress = getStatusProgress(complaint.status);
+  const progressPercent = Math.round((statusProgress.index / 4) * 100);
 
   // Avatar Initials
   const getInitials = (name) => {
@@ -204,16 +187,14 @@ export default function ComplaintDetails() {
           
           <div className="relative flex justify-between">
             {[
-              { idx: 1, label: "Submitted", statusText: "COMPLETED", date: getDayOnlyStr(complaint.created_at, "OCT 12, 2024") },
-              { idx: 2, label: "Under Review", statusText: "COMPLETED", date: getDayOnlyStr(complaint.updated_at, "OCT 14, 2024") },
-              { idx: 3, label: "Action Required", statusText: "NEEDS ATTENTION", date: "OCT 14, 2024" },
+              { idx: 1, label: "Submitted", statusText: "COMPLETED", date: getDayOnlyStr(complaint.created_at) },
+              { idx: 2, label: "Under Review", statusText: "COMPLETED", date: getDayOnlyStr(complaint.updated_at) },
+              { idx: 3, label: "In Progress", statusText: "IN PROGRESS", date: getDayOnlyStr(complaint.updated_at) },
               { idx: 4, label: "Resolved", statusText: "PENDING", date: "PENDING" }
             ].map((milestone) => {
               const isCompleted = statusProgress.index > milestone.idx || complaint.status === "Resolved";
               const isCurrent = statusProgress.index === milestone.idx && complaint.status !== "Resolved";
               
-              const isActionRequiredError = milestone.idx === 3 && complaint.status === "Action Required";
-
               return (
                 <div key={milestone.idx} className="flex flex-col items-center z-10 text-center">
                   <div className={`
@@ -221,19 +202,13 @@ export default function ComplaintDetails() {
                     ${isCompleted 
                       ? "bg-emerald-600 text-white" 
                       : isCurrent
-                        ? isActionRequiredError
-                          ? "bg-rose-900 text-white ring-4 ring-rose-50" 
-                          : "bg-emerald-950 text-white ring-4 ring-emerald-50"
+                        ? "bg-emerald-950 text-white ring-4 ring-emerald-50"
                         : "bg-slate-100 border border-slate-200 text-slate-400"}
                   `}>
                     {isCompleted ? (
                       <Check className="h-5 w-5 stroke-[3]" />
                     ) : isCurrent ? (
-                      isActionRequiredError ? (
-                        <span className="text-sm font-extrabold">!</span>
-                      ) : (
-                        <span className="h-2 w-2 rounded-full bg-white" />
-                      )
+                      <span className="h-2 w-2 rounded-full bg-white" />
                     ) : (
                       <Lock className="h-3.5 w-3.5 text-slate-300" />
                     )}
@@ -248,7 +223,7 @@ export default function ComplaintDetails() {
 
                   <span className={`
                     text-[9px] font-black uppercase tracking-wider mt-1 block
-                    ${isCurrent ? "text-rose-600" : isCompleted ? "text-emerald-600" : "text-slate-350"}
+                    ${isCurrent ? "text-emerald-600" : isCompleted ? "text-emerald-600" : "text-slate-400"}
                   `}>
                     {isCurrent ? milestone.statusText : milestone.date}
                   </span>
@@ -297,10 +272,10 @@ export default function ComplaintDetails() {
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Assigned To</span>
                 <div className="flex items-center gap-2 mt-1">
                   <div className="h-6 w-6 bg-emerald-800 text-white rounded-full flex items-center justify-center text-[9px] font-bold">
-                    {getInitials(complaint.assignee?.name || " Dean of Operations")}
+                    {getInitials(complaint.assignee?.name || "Unassigned")}
                   </div>
                   <span className="font-extrabold text-slate-800 text-[11px]">
-                    {complaint.assignee?.name || "Dean of Operations"}
+                    {complaint.assignee?.name || "Unassigned"}
                   </span>
                 </div>
               </div>
@@ -331,7 +306,7 @@ export default function ComplaintDetails() {
                     onChange={(e) => setStatus(e.target.value)}
                     className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl p-3 text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
                   >
-                    {["Submitted", "Under Review", "In Progress", "Action Required", "Resolved", "Rejected"].map((item) => (
+                    {["Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map((item) => (
                       <option key={item} value={item} className="text-slate-900 font-semibold">{item}</option>
                     ))}
                   </select>
@@ -391,29 +366,12 @@ export default function ComplaintDetails() {
             </div>
 
             <div className="p-6 sm:p-8 flex flex-col gap-6">
-              
-              {/* Message 1: Seed structure matching mockup */}
-              <div className="flex gap-4 items-start">
-                <div className="h-9 w-9 rounded-xl bg-slate-900 text-white font-black text-xs flex items-center justify-center shrink-0">
-                  A
+              {customMessages.length === 0 && (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center">
+                  <p className="text-xs font-extrabold text-slate-800">No communication records available</p>
+                  <p className="text-[11px] text-slate-400 font-semibold mt-1">Messages will appear here when backend data is available.</p>
                 </div>
-                <div className="flex flex-col gap-1 items-start max-w-xl">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs font-black text-slate-800">Administrator (Grievance Cell)</span>
-                    <span className="text-[10px] text-slate-400 font-bold">Oct 14, 2024 • 02:15 PM</span>
-                  </div>
-                  <div className="bg-slate-50 border border-slate-150 rounded-2xl rounded-tl-xs p-4 text-xs font-semibold text-slate-700 leading-relaxed">
-                    We have reviewed your complaint. Please upload a clear photograph of the electrical fittings mentioned in your description to help us assess the emergency level for the maintenance team.
-                  </div>
-                </div>
-              </div>
-
-              {/* Status Change Notice pill centered */}
-              <div className="flex justify-center my-1">
-                <span className="bg-slate-100 text-slate-500 font-bold text-[10px] uppercase tracking-wider py-1.5 px-4 rounded-full border border-slate-150">
-                  Status changed to: {complaint.status?.toUpperCase() || "UNDER REVIEW"}
-                </span>
-              </div>
+              )}
 
               {/* Custom interactive messages */}
               {customMessages.map((msg, i) => (
@@ -443,14 +401,6 @@ export default function ComplaintDetails() {
                 />
 
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <button 
-                    type="button"
-                    onClick={uploadDummyAttachment}
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold py-2.5 px-4 rounded-xl transition-all cursor-pointer shadow-3xs"
-                  >
-                    <UploadCloud className="h-4 w-4 text-slate-400" />
-                    Upload Requested Documents
-                  </button>
 
                   <button 
                     type="submit"
@@ -478,7 +428,7 @@ export default function ComplaintDetails() {
             </div>
 
             <div className="flex flex-col gap-2.5 mt-1">
-              {attachments.map((file, idx) => (
+              {attachments.length > 0 ? attachments.map((file, idx) => (
                 <div 
                   key={idx} 
                   className="bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-2xl p-3.5 flex items-center justify-between gap-3 transition-colors duration-150"
@@ -500,7 +450,12 @@ export default function ComplaintDetails() {
                     <Download className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              ))}
+              )) : (
+                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 text-center">
+                  <p className="text-xs font-extrabold text-slate-800">No attachments available</p>
+                  <p className="text-[11px] text-slate-400 font-semibold mt-1">Backend attachment data is not available for this complaint.</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -518,19 +473,14 @@ export default function ComplaintDetails() {
               <div className="flex flex-col gap-6">
                 {[
                   {
-                    status: "Action Required",
-                    time: "Oct 14, 2024 • 02:15 PM",
-                    desc: "Administrator requested additional photographic evidence for diagnostics."
+                    status: complaint.status || "Submitted",
+                    time: formatFullDate(complaint.updated_at),
+                    desc: `Current status is ${complaint.status || "Submitted"}.`
                   },
                   {
-                    status: "Review Started",
-                    time: "Oct 14, 2024 • 09:00 AM",
-                    desc: "Assigned to Dean of Operations for technical preliminary assessment."
-                  },
-                  {
-                    status: "Grievance Submitted",
-                    time: "Oct 12, 2024 • 10:45 AM",
-                    desc: "Initial report logged automatically inside formal portal files database."
+                    status: "Submitted",
+                    time: formatFullDate(complaint.created_at),
+                    desc: "Complaint record created."
                   }
                 ].map((log, idx) => (
                   <div key={idx} className="relative pl-6">
@@ -568,12 +518,12 @@ export default function ComplaintDetails() {
             <div className="space-y-1 pt-2 border-t border-slate-100 text-left">
               <div className="flex items-center justify-between text-[10px] font-black uppercase text-slate-500">
                 <span>Progress to Closure</span>
-                <span>{complaint.status === "Resolved" ? "100%" : "75%"}</span>
+                <span>{progressPercent}%</span>
               </div>
               <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-emerald-600 transition-all duration-300"
-                  style={{ width: complaint.status === "Resolved" ? "100%" : "75%" }}
+                  style={{ width: `${progressPercent}%` }}
                 />
               </div>
             </div>
@@ -586,3 +536,4 @@ export default function ComplaintDetails() {
     </div>
   );
 }
+

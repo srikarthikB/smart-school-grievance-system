@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { 
@@ -162,7 +162,7 @@ export default function AppLayout() {
               {user?.name ? user.name[0].toUpperCase() : "U"}
             </div>
             <div className="min-w-0 flex-1 text-left">
-              <p className="text-[12.5px] font-black text-slate-800 truncate leading-tight">{user?.name || "Karthik"}</p>
+              <p className="text-[12.5px] font-black text-slate-800 truncate leading-tight">{user?.name || "User"}</p>
               <p className="text-[10px] text-emerald-800 font-extrabold uppercase tracking-wide truncate mt-1 leading-none">{user?.role || "Student"}</p>
             </div>
           </div>
@@ -176,7 +176,7 @@ export default function AppLayout() {
               let isActive = location.pathname === item.path;
               
               if (user?.role === "staff") {
-                // For staff console sidebar simulation, "Active Cases" is highlighted by default on /staff
+                // For staff console sidebar "Active Cases" is highlighted by default on /staff
                 if (item.isActiveCasesLink && location.pathname === "/staff") {
                   isActive = true;
                 } else if (item.isDashboardLink && location.pathname === "/staff") {
@@ -253,3 +253,5 @@ export default function AppLayout() {
     </div>
   );
 }
+
+

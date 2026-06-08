@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+﻿import React, { useEffect, useState, useMemo } from "react";
 import api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext.jsx";
 import { 
@@ -40,7 +40,7 @@ export default function StaffComplaints() {
   
   // State for interactive features
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All"); // All, Pending, Review, Action, Resolved
+  const [statusFilter, setStatusFilter] = useState("All"); // All, Submitted, Review, Action, Resolved
   const [remarksMap, setRemarksMap] = useState({});
   const [newRemarkText, setNewRemarkText] = useState("");
   const [showRemarkInput, setShowRemarkInput] = useState(false);
@@ -118,17 +118,19 @@ export default function StaffComplaints() {
         category.includes(keyword) || 
         `grv-${c.id}`.includes(keyword);
 
-      // 2. Status match (All, Pending, Review, Action, Resolved)
+      // 2. Status match
       const s = String(c.status || "").toLowerCase();
       let matchesStatus = true;
-      if (statusFilter === "Pending") {
-        matchesStatus = s === "pending" || s === "submitted";
-      } else if (statusFilter === "Review") {
-        matchesStatus = s === "under review" || s === "in progress" || s === "review";
-      } else if (statusFilter === "Action") {
-        matchesStatus = s === "action required";
+      if (statusFilter === "Submitted") {
+        matchesStatus = s === "submitted";
+      } else if (statusFilter === "Under Review") {
+        matchesStatus = s === "under review";
+      } else if (statusFilter === "In Progress") {
+        matchesStatus = s === "in progress";
       } else if (statusFilter === "Resolved") {
         matchesStatus = s === "resolved";
+      } else if (statusFilter === "Rejected") {
+        matchesStatus = s === "rejected";
       }
 
       return matchesSearch && matchesStatus;
@@ -144,9 +146,9 @@ export default function StaffComplaints() {
     const currentRemarks = remarksMap[complaintId] || [];
     const newRemark = {
       id: "rem-" + Date.now(),
-      author: user?.name || "Dean of Operations",
+      author: user?.name || "Unassigned",
       text: newRemarkText.trim(),
-      timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) + " • Today"
+      timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) + " â€¢ Today"
     };
 
     const updatedRemarks = [...currentRemarks, newRemark];
@@ -168,7 +170,7 @@ export default function StaffComplaints() {
     if (!selectedComplaint) return;
     try {
       await api.patch(`/complaints/${selectedComplaint.id}`, { priority: "High" });
-      setActionSuccessMessage("Case successfully escalated to URGENT priority.");
+      setActionSuccessMessage("Case successfully escalated to High priority.");
       setTimeout(() => setActionSuccessMessage(""), 4000);
       loadData();
     } catch (err) {
@@ -209,12 +211,12 @@ export default function StaffComplaints() {
   const getPriorityTag = (p) => {
     const priority = String(p || "").toUpperCase();
     if (priority === "HIGH") {
-      return { label: "URGENT", style: "bg-rose-50 text-rose-700 border-rose-150 border font-extrabold" };
+      return { label: "High", style: "bg-rose-50 text-rose-700 border-rose-150 border font-extrabold" };
     }
     if (priority === "MEDIUM") {
       return { label: "HIGH", style: "bg-amber-50 text-amber-700 border-amber-150 border font-extrabold" };
     }
-    return { label: "ROUTINE", style: "bg-slate-100 text-slate-600 border-slate-200 border font-bold" };
+    return { label: "Standard", style: "bg-slate-100 text-slate-600 border-slate-200 border font-bold" };
   };
 
   const getStatusBadgeStyle = (status) => {
@@ -222,7 +224,7 @@ export default function StaffComplaints() {
     if (s === "resolved") {
       return "bg-[#f0fdf4] text-emerald-800 border border-emerald-100";
     }
-    if (s === "action required") {
+    if (s === "In Progress") {
       return "bg-rose-50 text-rose-800 border border-rose-150";
     }
     if (s === "under review" || s === "in progress" || s === "review") {
@@ -232,14 +234,14 @@ export default function StaffComplaints() {
   };
 
   // Safe formatting date/time 
-  const displayTime = (dateString, fallback = "2 hours ago") => {
-    if (!dateString) return fallback;
+  const displayTime = (dateString) => {
+    if (!dateString) return "No date";
     try {
       const dateObj = new Date(dateString);
-      if (isNaN(dateObj.getTime())) return fallback;
+      if (isNaN(dateObj.getTime())) return "No date";
       return dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     } catch {
-      return fallback;
+      return "No date";
     }
   };
 
@@ -273,7 +275,7 @@ export default function StaffComplaints() {
           {/* Connected User Profile */}
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block">
-              <span className="text-xs font-black text-slate-800 block">{user?.name || "Dean of Operations"}</span>
+              <span className="text-xs font-black text-slate-800 block">{user?.name || "Unassigned"}</span>
               <span className="text-[10px] text-emerald-800 font-extrabold uppercase block tracking-wider mt-0.5">Staff Officer</span>
             </div>
             <img 
@@ -301,7 +303,7 @@ export default function StaffComplaints() {
           <div className="space-y-1.5 text-left">
             <span className="text-xs font-bold text-slate-500 block">Assigned</span>
             <span className="text-3xl font-black text-slate-800 block">
-              {assignedComplaints.length > 0 ? assignedComplaints.length : 24}
+              {assignedComplaints.length}
             </span>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-800 flex items-center justify-center border border-emerald-100/40">
@@ -309,12 +311,12 @@ export default function StaffComplaints() {
           </div>
         </div>
 
-        {/* Metric 2: Pending Review */}
+        {/* Metric 2: Submitted Review */}
         <div className="bg-white rounded-3xl border border-slate-205 border-slate-200/90 p-6 flex items-center justify-between shadow-3xs">
           <div className="space-y-1.5 text-left">
-            <span className="text-xs font-bold text-slate-500 block">Pending Review</span>
+            <span className="text-xs font-bold text-slate-500 block">Submitted Review</span>
             <span className="text-3xl font-black text-slate-800 block">
-              {allComplaints.filter(c => c.status !== "Resolved" && c.status !== "Rejected").length || 12}
+              {allComplaints.filter(c => c.status !== "Resolved" && c.status !== "Rejected").length}
             </span>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center border border-rose-100/50">
@@ -327,7 +329,7 @@ export default function StaffComplaints() {
           <div className="space-y-1.5 text-left">
             <span className="text-xs font-bold text-slate-500 block">Resolved (Monthly)</span>
             <span className="text-3xl font-black text-slate-800 block">
-              {allComplaints.filter(c => c.status === "Resolved").length + 83}
+              {allComplaints.filter(c => c.status === "Resolved").length}
             </span>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-[#ecfdf5] text-emerald-700 flex items-center justify-center border border-emerald-100/55">
@@ -360,7 +362,7 @@ export default function StaffComplaints() {
 
             {/* Pill Filters row matches screenshot buttons precisely */}
             <div className="flex flex-wrap items-center gap-1.5 pt-1">
-              {["All", "Pending", "Review", "Action", "Resolved"].map((pill) => {
+              {["All", "Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map((pill) => {
                 const isActive = statusFilter === pill;
                 return (
                   <button
@@ -444,7 +446,7 @@ export default function StaffComplaints() {
                     {/* Bottom Status Row & CTA Trigger */}
                     <div className="flex items-center justify-between gap-4 pt-1">
                       <span className={`text-[10px] font-black uppercase tracking-wider px-3 py-1.5 rounded-xl ${getStatusBadgeStyle(c.status)}`}>
-                        {c.status || "Pending"}
+                        {c.status || "Submitted"}
                       </span>
 
                       <span className="inline-flex items-center gap-1 text-emerald-800 text-[11px] font-extrabold hover:underline">
@@ -488,7 +490,7 @@ export default function StaffComplaints() {
                 <div className="min-w-0">
                   <h4 className="text-xs font-black text-slate-800 block truncate">{selectedComplaint.creator?.name || "Student G."}</h4>
                   <p className="text-[10px] text-slate-400 font-extrabold block truncate mt-0.5 uppercase tracking-wide">
-                    ID: 2026-CS-{String(selectedComplaint.id).padStart(4, "0")} • Year 3
+                    Case ID: {String(selectedComplaint.id).padStart(4, "0")} â€¢ Year 3
                   </p>
                 </div>
               </div>
@@ -499,7 +501,7 @@ export default function StaffComplaints() {
                   COMPLAINT DESCRIPTION
                 </span>
                 <div className="text-slate-600 text-xs font-semibold leading-relaxed relative py-1">
-                  <span className="text-slate-300 font-serif text-3xl select-none absolute -left-1 -top-3 block">“</span>
+                  <span className="text-slate-300 font-serif text-3xl select-none absolute -left-1 -top-3 block">â€œ</span>
                   <div className="pl-4 italic whitespace-pre-wrap">{selectedComplaint.description}</div>
                 </div>
               </div>
@@ -558,8 +560,8 @@ export default function StaffComplaints() {
                   <div className="relative pl-5 flex items-start gap-2">
                     <div className="absolute left-[0.2px] top-1.5 h-2 w-2 rounded-full bg-emerald-800 ring-4 ring-emerald-50" />
                     <div>
-                      <span className="text-[9px] text-slate-400 font-bold block">Today, 10:15 AM</span>
-                      <strong className="text-[11px] text-slate-800 block">Case Assigned to Academic Office</strong>
+                      <span className="text-[9px] text-slate-400 font-bold block">No date</span>
+                      <strong className="text-[11px] text-slate-800 block">Case selected for review</strong>
                     </div>
                   </div>
 
@@ -649,7 +651,7 @@ export default function StaffComplaints() {
                         onChange={(e) => setStatusDraft(e.target.value)}
                         className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0c3127] cursor-pointer"
                       >
-                        {["Pending", "Under Review", "In Progress", "Action Required", "Resolved", "Rejected"].map(s => (
+                        {["Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map(s => (
                           <option key={s} value={s}>{s}</option>
                         ))}
                       </select>
@@ -740,3 +742,5 @@ export default function StaffComplaints() {
     </div>
   );
 }
+
+

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/client";
 import { 
@@ -290,7 +290,7 @@ export default function CreateComplaint() {
                 <UploadCloud className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-xs font-bold text-slate-800">Drag &amp; drop files here, or click to simulated browse</p>
+                <p className="text-xs font-bold text-slate-800">Evidence upload is unavailable until backend storage is connected</p>
                 <p className="text-[11px] text-slate-400 font-semibold mt-1">Supports PDF, PNG, JPG up to 10MB each</p>
               </div>
             </div>
@@ -437,3 +437,4 @@ export default function CreateComplaint() {
     </div>
   );
 }
+

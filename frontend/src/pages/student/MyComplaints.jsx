@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/client";
 import { 
@@ -31,7 +31,7 @@ export default function MyComplaints() {
   }, []);
 
   // Format date helper
-  const formatDate = (dateString, fallback = "Oct 12, 2024") => {
+  const formatDate = (dateString, fallback = "No date") => {
     if (!dateString) return fallback;
     try {
       const date = new Date(dateString);
@@ -52,8 +52,8 @@ export default function MyComplaints() {
     if (s === "resolved") {
       return { stepIndex: 4, label: "Resolved" };
     }
-    if (s === "action required" || s === "in progress") {
-      return { stepIndex: 3, label: "Action" };
+    if (s === "In Progress" || s === "in progress") {
+      return { stepIndex: 3, label: "Progress" };
     }
     if (s === "under review") {
       return { stepIndex: 2, label: "Review" };
@@ -74,32 +74,34 @@ export default function MyComplaints() {
       statusFilter === "All Statuses" || 
       (c.status || "").toLowerCase() === statusFilter.toLowerCase();
 
-    // Time filter simulation (in mock scenario, we'll return all, but we can match dates if real)
     let matchesTime = true;
     if (timeFilter === "Last 7 Days") {
-      // simulate check
-      matchesTime = true;
+      const created = new Date(c.created_at).getTime();
+      matchesTime = Number.isFinite(created) && Date.now() - created <= 7 * 24 * 60 * 60 * 1000;
+    } else if (timeFilter === "Last 30 Days") {
+      const created = new Date(c.created_at).getTime();
+      matchesTime = Number.isFinite(created) && Date.now() - created <= 30 * 24 * 60 * 60 * 1000;
     }
 
     return matchesSearch && matchesStatus && matchesTime;
   });
 
   // Compile timeline updates dynamically based on user's complaints
-  const timelineUpdates = complaints.slice(0, 3).map((c, idx) => {
-    const dateStr = formatDate(c.created_at, idx === 0 ? "Today, 10:45 AM" : idx === 1 ? "Yesterday, 02:30 PM" : "Oct 12, 2024");
+  const timelineUpdates = complaints.slice(0, 3).map((c) => {
+    const dateStr = formatDate(c.created_at);
     
     let heading = `New grievance submitted`;
     let subtext = `Complaint regarding ${c.category || "General"} categorized successfully.`;
     
     if (c.status === "Resolved") {
       heading = `Status changed to "Resolved"`;
-      subtext = c.resolution_notes || `Your issue has been resolved by ${c.assignee?.name || "Operations Team"}.`;
-    } else if (c.status === "Action Required") {
-      heading = `Status changed to "Action Required"`;
-      subtext = `Additional information or photo evidence requested for grievance #${c.id}.`;
+      subtext = c.resolution_notes || "Your issue has been resolved.";
+    } else if (c.status === "In Progress") {
+      heading = `Status changed to "In Progress"`;
+      subtext = `Status updated for grievance #${c.id}.`;
     } else if (c.status === "In Progress" || c.status === "Under Review") {
-      heading = `Grievance assigned to ${c.assignee?.name || "Appropriate Dean"}`;
-      subtext = `Investigation is active under standard institutional review speed.`;
+      heading = c.assignee?.name ? `Grievance assigned to ${c.assignee.name}` : "Grievance is under review";
+      subtext = "Investigation is active.";
     }
 
     return {
@@ -110,29 +112,13 @@ export default function MyComplaints() {
     };
   });
 
-  // Fallback timeline updates if no complaints exist
-  const defaultTimeline = [
-    {
-      id: "demo-1",
-      time: "Today, 10:45 AM",
-      heading: 'Status changed to "Action Required"',
-      subtext: "Additional photo evidence requested for #GRV-2024-089."
-    },
-    {
-      id: "demo-2",
-      time: "Yesterday, 02:30 PM",
-      heading: "Grievance assigned to Dean",
-      subtext: "Investigation set to active status under designated committee."
-    },
-    {
-      id: "demo-3",
-      time: "Oct 12, 2024",
-      heading: "New grievance submitted",
-      subtext: "System classified complaint category and successfully logged."
-    }
-  ];
-
-  const finalTimeline = timelineUpdates.length > 0 ? timelineUpdates : defaultTimeline;
+  const resolvedDurations = complaints
+    .filter((c) => c.status === "Resolved" && c.created_at && c.updated_at)
+    .map((c) => new Date(c.updated_at).getTime() - new Date(c.created_at).getTime())
+    .filter((ms) => Number.isFinite(ms) && ms >= 0);
+  const averageResolutionDays = resolvedDurations.length
+    ? (resolvedDurations.reduce((sum, ms) => sum + ms, 0) / resolvedDurations.length / 86400000).toFixed(1)
+    : "0";
 
   return (
     <div className="flex flex-col gap-8 pb-16">
@@ -162,7 +148,7 @@ export default function MyComplaints() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="appearance-none bg-white border border-slate-200 rounded-xl px-4 py-2.5 pr-10 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-700 cursor-pointer"
             >
-              {["All Statuses", "Pending", "Under Review", "In Progress", "Action Required", "Resolved"].map((item) => (
+              {["All Statuses", "Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map((item) => (
                 <option key={item} value={item}>{item}</option>
               ))}
             </select>
@@ -222,7 +208,7 @@ export default function MyComplaints() {
               
               // Custom Badges for exact status matching the mockup style
               let badgeColor = "bg-slate-55 bg-slate-100 text-slate-800";
-              if (c.status === "Action Required") {
+              if (c.status === "In Progress") {
                 badgeColor = "bg-rose-50 text-rose-800 border-rose-100/50 border";
               } else if (c.status === "Under Review") {
                 badgeColor = "bg-emerald-50 text-emerald-800 border-emerald-100/50 border";
@@ -244,7 +230,7 @@ export default function MyComplaints() {
                       #GRV-2026-{String(c.id).padStart(3, "0")}
                     </span>
                     <span className={`text-[10px] font-bold tracking-wide uppercase px-3 py-1.5 rounded-xl ${badgeColor}`}>
-                      {c.status || "Pending"}
+                      {c.status || "Submitted"}
                     </span>
                   </div>
 
@@ -262,7 +248,7 @@ export default function MyComplaints() {
                       {[
                         { step: 1, label: "Submitted" },
                         { step: 2, label: "Review" },
-                        { step: 3, label: "Action" },
+                        { step: 3, label: "Progress" },
                         { step: 4, label: "Resolved" }
                       ].map((item) => {
                         const isCompleted = stepIndex > item.step;
@@ -320,7 +306,7 @@ export default function MyComplaints() {
                     <div className="flex flex-col gap-1">
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Assigned To</span>
                       <span className="font-extrabold text-slate-800 text-[11px] truncate">
-                        {c.assignee?.name || " Dean of Operations"}
+                        {c.assignee?.name || "Unassigned"}
                       </span>
                     </div>
                   </div>
@@ -352,7 +338,7 @@ export default function MyComplaints() {
             </div>
             <div>
               <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-4xl font-black text-slate-900 tracking-tight">4.2</span>
+                <span className="text-4xl font-black text-slate-900 tracking-tight">{averageResolutionDays}</span>
                 <span className="text-base font-bold text-slate-800">Days</span>
               </div>
               <p className="text-[11px] font-semibold text-slate-400 mt-1">Average Resolution Time</p>
@@ -379,7 +365,7 @@ export default function MyComplaints() {
               <div className="absolute top-6 bottom-6 left-[19px] w-[1px] bg-slate-200" />
 
               <div className="flex flex-col gap-6">
-                {finalTimeline.map((item, index) => (
+                {timelineUpdates.length > 0 ? timelineUpdates.map((item) => (
                   <div key={item.id} className="relative pl-6">
                     {/* Circle marker milestone connector */}
                     <div className="absolute left-[1.5px] top-1.5 h-2 w-2 rounded-full border border-slate-350 bg-white ring-4 ring-slate-100" />
@@ -394,7 +380,17 @@ export default function MyComplaints() {
                       {item.subtext}
                     </span>
                   </div>
-                ))}
+                )) : (
+                  <div className="relative pl-6">
+                    <div className="absolute left-[1.5px] top-1.5 h-2 w-2 rounded-full border border-slate-300 bg-white ring-4 ring-slate-100" />
+                    <strong className="text-xs font-extrabold text-slate-800 leading-tight block">
+                      No timeline updates yet
+                    </strong>
+                    <span className="text-[11px] text-slate-500 font-semibold leading-relaxed block mt-1">
+                      Updates will appear when your complaints change status.
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -412,7 +408,7 @@ export default function MyComplaints() {
             <div>
               <h4 className="text-xs font-black tracking-wide uppercase text-emerald-350 mb-1">Did you know?</h4>
               <p className="text-[11px] text-emerald-100/90 leading-relaxed font-semibold">
-                Urgent safety matters are prioritized and typically reviewed within 6 working hours. Ensure all relevant photos are attached.
+                Safety-related grievances are highlighted by priority when the backend data marks them as High.
               </p>
             </div>
           </div>
@@ -488,7 +484,7 @@ export function ComplaintTable({ complaints, showFeedback }) {
                     {c.title}
                   </p>
                   <p className="text-[11px] text-slate-400 font-semibold truncate mt-1">
-                    Assigned to: <span className="text-slate-600 font-bold">{c.assignee?.name || "Unassigned Operations Team"}</span>
+                    Assigned to: <span className="text-slate-600 font-bold">{c.assignee?.name || "Unassigned"}</span>
                   </p>
                 </div>
               </div>
@@ -544,3 +540,5 @@ export function ComplaintTable({ complaints, showFeedback }) {
     </div>
   );
 }
+
+

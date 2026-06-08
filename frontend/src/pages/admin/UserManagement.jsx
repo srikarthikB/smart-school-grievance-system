@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+﻿import React, { useEffect, useState, useMemo } from "react";
 import api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext.jsx";
 import { 
@@ -162,8 +162,7 @@ export default function UserManagement() {
   const handleExportCSV = () => {
     const headers = "UserID,Name,Email,Role,Department,Status\n";
     const rows = filteredUsers.map((u) => {
-      const s = (u.id % 4 === 0) ? "Suspended" : (u.id % 5 === 0) ? "Pending" : "Active";
-      return `${u.id},"${u.name}","${u.email}","${u.role}","${u.department || "None"}",${s}`;
+      return `${u.id},"${u.name}","${u.email}","${u.role}","${u.department || "None"}","Not provided"`;
     }).join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
@@ -175,13 +174,11 @@ export default function UserManagement() {
 
   // Helper visual statistics counts aligned with top stats card widgets
   const studentCount = useMemo(() => {
-    const serverCount = users.filter(u => u.role === "student").length;
-    return serverCount > 0 ? serverCount : 12482; // static overlay matched to screenshot plus dynamic backup
+    return users.filter(u => u.role === "student").length;
   }, [users]);
 
   const staffCount = useMemo(() => {
-    const serverCount = users.filter(u => u.role === "staff" || u.role === "admin").length;
-    return serverCount > 0 ? serverCount : 845;
+    return users.filter(u => u.role === "staff" || u.role === "admin").length;
   }, [users]);
 
   // Filter computations
@@ -207,12 +204,6 @@ export default function UserManagement() {
       // 3. Department filter matching
       if (deptFilter !== "All") {
         if (u.department !== deptFilter) return false;
-      }
-
-      // 4. Status mock mapping mirroring the screenshot nicely
-      const derivedStatus = (u.id % 4 === 0) ? "Suspended" : (u.id % 5 === 0) ? "Pending" : "Active";
-      if (statusFilter !== "All") {
-        if (statusFilter !== derivedStatus) return false;
       }
 
       return true;
@@ -416,18 +407,16 @@ export default function UserManagement() {
             </select>
           </div>
 
-          {/* Filter 4: Interactive simulation status */}
+          {/* Account status is unavailable until the backend exposes it */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Account Status</label>
             <select 
               value={statusFilter} 
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
+              disabled
+              className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-400 focus:outline-none cursor-not-allowed"
             >
-              <option value="All">All Statuses</option>
-              <option value="Active">Active</option>
-              <option value="Pending">Pending</option>
-              <option value="Suspended">Suspended</option>
+              <option value="All">Not provided</option>
             </select>
           </div>
 
@@ -444,7 +433,7 @@ export default function UserManagement() {
                 <th className="px-6 py-4">Role</th>
                 <th className="px-6 py-4">Department</th>
                 <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Last Login</th>
+                <th className="px-6 py-4">Last Login Status</th>
                 <th className="px-6 py-4 text-center">Actions</th>
               </tr>
             </thead>
@@ -461,16 +450,7 @@ export default function UserManagement() {
                 </tr>
               ) : (
                 filteredUsers.map((u) => {
-                  // Standard simulated status based on consistent mock calculations matching screenshot nicely
-                  const derivedStatus = (u.id % 4 === 0) ? "Suspended" : (u.id % 5 === 0) ? "Pending" : "Active";
-                  
-                  // Status rendering style configuration
-                  let statusCardClass = "bg-emerald-50 text-emerald-800 border-emerald-150";
-                  if (derivedStatus === "Pending") {
-                    statusCardClass = "bg-amber-50 text-amber-800 border-amber-150";
-                  } else if (derivedStatus === "Suspended") {
-                    statusCardClass = "bg-rose-50 text-rose-800 border-rose-150";
-                  }
+                  const statusCardClass = "bg-slate-50 text-slate-500 border-slate-200";
 
                   // Role badging style mapping
                   let roleCardClass = "bg-slate-100 text-slate-700 border-slate-200";
@@ -542,13 +522,12 @@ export default function UserManagement() {
                       <td className="px-6 py-4 whitespace-nowrap text-xs">
                         <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusCardClass}`}>
                           <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          {derivedStatus}
+                          Not provided
                         </span>
                       </td>
 
-                      {/* Last Login timestamps simulation */}
                       <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-500 font-bold">
-                        {u.id % 2 === 0 ? "2 hrs ago" : u.id % 3 === 0 ? "Yesterday" : "4 days ago"}
+                        Not available
                       </td>
 
                       {/* User record operations action drawer */}
@@ -802,7 +781,7 @@ export default function UserManagement() {
                 <input 
                   type="password"
                   required
-                  placeholder="••••••••" 
+                  placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" 
                   value={staffForm.password} 
                   onChange={(e) => setStaffForm({ ...staffForm, password: e.target.value })} 
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 placeholder-slate-450 focus:outline-none focus:ring-1 focus:ring-[#0c3127]"
@@ -930,3 +909,4 @@ export default function UserManagement() {
     </div>
   );
 }
+
