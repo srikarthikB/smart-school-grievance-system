@@ -18,6 +18,9 @@ import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import ComplaintManagement from "./pages/admin/ComplaintManagement.jsx";
 import UserManagement from "./pages/admin/UserManagement.jsx";
 import AnalyticsDashboard from "./pages/admin/AnalyticsDashboard.jsx";
+import StaffClosedCases from "./pages/staff/StaffClosedCases.jsx";
+import StaffAnalytics from "./pages/staff/StaffAnalytics.jsx";
+import StaffSettings from "./pages/staff/StaffSettings.jsx";
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/service-worker.js"));
@@ -43,6 +46,32 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="/admin/users" element={<ProtectedRoute roles={["admin"]}><UserManagement /></ProtectedRoute>} />
             <Route path="/admin/analytics" element={<ProtectedRoute roles={["admin"]}><AnalyticsDashboard /></ProtectedRoute>} />
             <Route path="/complaints/:id" element={<ProtectedRoute roles={["student", "staff", "admin"]}><ComplaintDetails /></ProtectedRoute>} />
+            <Route
+              path="/staff/closed"
+              element={
+                <ProtectedRoute roles={["staff"]}>
+                  <StaffClosedCases />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/staff/analytics"
+              element={
+                <ProtectedRoute roles={["staff"]}>
+                  <StaffAnalytics />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/staff/settings"
+              element={
+                <ProtectedRoute roles={["staff"]}>
+                  <StaffSettings />
+                </ProtectedRoute>
+              }
+            />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

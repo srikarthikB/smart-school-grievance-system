@@ -70,17 +70,17 @@ export default function AppLayout() {
       },
       {
         label: "Closed Cases",
-        path: "/staff",
+        path: "/staff/closed",
         icon: History,
       },
       {
         label: "Analytics",
-        path: "/staff",
+        path: "/staff/analytics",
         icon: BarChart3,
       },
       {
         label: "Settings",
-        path: "/staff",
+        path: "/staff/settings",
         icon: Settings,
       }
     );
