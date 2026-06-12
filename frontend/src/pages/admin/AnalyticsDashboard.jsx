@@ -42,6 +42,11 @@ export default function AnalyticsDashboard() {
         setAnalytics(analyticsRes.data);
         setComplaints(complaintsRes.data || []);
       })
+      .catch((err) => {
+        console.error("Failed to load analytics", err);
+        setAnalytics(null);
+        setComplaints([]);
+      })
       .finally(() => setLoading(false));
   }
 
@@ -95,13 +100,10 @@ export default function AnalyticsDashboard() {
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   };
 
-  // Simulated export task
   const handleExportPDF = () => {
-    setStatusNotification("Preparing executive audit document...");
-    setTimeout(() => {
-      window.print();
-      setStatusNotification("");
-    }, 1000);
+    setStatusNotification("Preparing report from current backend data...");
+    window.print();
+    setStatusNotification("");
   };
 
   const monthlyBuckets = useMemo(() => {
@@ -257,7 +259,7 @@ export default function AnalyticsDashboard() {
               {stats.rate}%
             </p>
             <div className="flex items-center gap-1 mt-2 text-[10px] text-emerald-600 font-black">
-              <span>TARGET MET (90%)</span>
+              <span>{stats.total ? "Calculated from current data" : "No resolved complaints"}</span>
             </div>
           </div>
         </div>
@@ -435,14 +437,6 @@ export default function AnalyticsDashboard() {
               <tbody className="divide-y divide-slate-100">
                 {filteredDepartments.map((d, index) => {
                   let badge = "bg-slate-50 text-slate-700 border-slate-200";
-                  if (d.status === "Excellent") {
-                    badge = "bg-emerald-50 text-emerald-800 border-emerald-150 font-bold";
-                  } else if (d.status === "Above Target") {
-                    badge = "bg-emerald-50 text-emerald-800 border-emerald-150 font-bold";
-                  } else if (d.status === "Review Needed") {
-                    badge = "bg-rose-50 text-rose-800 border-rose-150 font-bold animate-pulse";
-                  }
-
                   return (
                     <tr key={index} className="hover:bg-slate-50/20 transition-all">
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -451,8 +445,7 @@ export default function AnalyticsDashboard() {
                       <td className="px-6 py-4 whitespace-nowrap text-xs text-slate-600 font-bold">
                         {d.cases}
                       </td>
-                      <td className={`px-6 py-4 whitespace-nowrap text-xs font-extrabold 
-                        ${d.status === "Review Needed" ? "text-rose-600" : "text-emerald-700"}`}>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs font-extrabold text-emerald-700">
                         {d.response}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -500,7 +493,7 @@ export default function AnalyticsDashboard() {
                   <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider block">Standard</span>
                   <p className="text-[11px] text-slate-500 font-medium">Within standard 5-day SLA</p>
                 </div>
-                <strong className="text-2xl font-black text-slate-800">{StandardCount}</strong>
+                <strong className="text-2xl font-black text-slate-800">{standardCount}</strong>
               </div>
 
             </div>
@@ -523,30 +516,6 @@ export default function AnalyticsDashboard() {
               </div>
             </div>
 
-          </div>
-
-          {/* Policy card component */}
-          <div className="bg-[#0c3127] text-white rounded-3xl p-6 shadow-md text-left flex flex-col gap-4 relative overflow-hidden group">
-            <div className="absolute right-0 top-0 translate-x-4 -translate-y-4 text-emerald-900 opacity-20 transform scale-150 pointer-events-none">
-              <ShieldCheck className="h-32 w-32" />
-            </div>
-
-            <div className="space-y-1 relative z-10">
-              <div className="flex items-center gap-2">
-                <Award className="h-4.5 w-4.5 text-emerald-400" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">Policy Update</span>
-              </div>
-              <p className="text-xs text-emerald-100 font-semibold leading-relaxed">
-                Review the new Q4 Grievance Resolution guidelines, SLA agreements & documentation requirements.
-              </p>
-            </div>
-
-            <button 
-              onClick={() => alert("Loading official policy documentation logs guidelines...")}
-              className="w-full bg-white hover:bg-emerald-50 text-[#0c3127] text-xs font-black py-2.5 rounded-xl transition-all cursor-pointer shadow-3xs relative z-10 text-center uppercase"
-            >
-              Review Policy
-            </button>
           </div>
 
         </div>

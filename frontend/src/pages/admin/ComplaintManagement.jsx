@@ -47,14 +47,20 @@ export default function ComplaintManagement() {
   const staff = useMemo(() => users.filter((u) => u.role === "staff"), [users]);
 
   function load() {
-    api.get("/complaints").then((res) => {
-      setComplaints(res.data);
-      // Auto-select the first complaint if none is selected
-      if (res.data && res.data.length > 0 && !selectedId) {
-        setSelectedId(res.data[0].id);
-      }
-    });
-    api.get("/users").then((res) => setUsers(res.data));
+    Promise.all([api.get("/complaints"), api.get("/users")])
+      .then(([complaintsRes, usersRes]) => {
+        setComplaints(complaintsRes.data || []);
+        setUsers(usersRes.data || []);
+        if (complaintsRes.data && complaintsRes.data.length > 0 && !selectedId) {
+          setSelectedId(complaintsRes.data[0].id);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load complaint management", err);
+        setComplaints([]);
+        setUsers([]);
+        setErrorMessage(err.response?.data?.detail || "Could not load complaint management data.");
+      });
   }
 
   useEffect(() => {
@@ -84,18 +90,15 @@ export default function ComplaintManagement() {
     setSuccessMessage("");
     setErrorMessage("");
     try {
-      // 1. Assign selected Staff
       if (drawerStaffId) {
         await api.patch(`/complaints/${activeComplaint.id}/assign`, { 
           staff_id: Number(drawerStaffId) 
         });
-      } else {
-        await api.patch(`/complaints/${activeComplaint.id}/assign`, { 
-          staff_id: null 
-        });
+      } else if (activeComplaint.assigned_to) {
+        setErrorMessage("Backend does not support unassigning a complaint.");
+        return;
       }
 
-      // 2. Set current Status
       await api.patch(`/complaints/${activeComplaint.id}/status`, { 
         status: drawerStatus 
       });
@@ -228,11 +231,13 @@ export default function ComplaintManagement() {
   // Category List options helper
   const uniqueCategories = [
     "All",
-    "Facilities Management",
-    "Transport",
     "Academic",
-    "Hostel",
-    "Administrative"
+    "Faculty",
+    "Student",
+    "Infrastructure",
+    "Transport",
+    "Administration",
+    "Other"
   ];
 
   return (

@@ -51,7 +51,13 @@ export default function UserManagement() {
   const [successMsg, setSuccessMsg] = useState("");
 
   function load() {
-    api.get("/users").then((res) => setUsers(res.data));
+    api.get("/users")
+      .then((res) => setUsers(res.data || []))
+      .catch((err) => {
+        console.error("Failed to load users", err);
+        setUsers([]);
+        setMessage(err.response?.data?.detail || "Could not load users.");
+      });
   }
 
   useEffect(() => {
@@ -518,7 +524,7 @@ export default function UserManagement() {
                         </div>
                       </td>
 
-                      {/* Simulated account Status Badges */}
+                      {/* Account status is unavailable until the backend exposes it */}
                       <td className="px-6 py-4 whitespace-nowrap text-xs">
                         <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusCardClass}`}>
                           <span className="h-1.5 w-1.5 rounded-full bg-current" />

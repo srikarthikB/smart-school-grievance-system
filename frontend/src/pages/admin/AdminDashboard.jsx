@@ -41,6 +41,11 @@ export default function AdminDashboard() {
         setComplaints(complaintsRes.data || []);
         setUsers(usersRes.data || []);
       })
+      .catch((err) => {
+        console.error("Failed to load admin dashboard", err);
+        setComplaints([]);
+        setUsers([]);
+      })
       .finally(() => setLoading(false));
   }
 
@@ -224,7 +229,7 @@ export default function AdminDashboard() {
             <p className="text-3xl font-black tracking-tight text-slate-800">{stats.rate}%</p>
             <div className="flex items-center gap-1.5 mt-2.5 text-[10px] text-emerald-600 font-black">
               <TrendingUp className="h-3 w-3" />
-              <span>TARGET: 90%</span>
+              <span>{stats.total ? "CURRENT DATA" : "NO COMPLAINTS"}</span>
             </div>
           </div>
         </div>
@@ -242,13 +247,13 @@ export default function AdminDashboard() {
             
             {/* Visual indicators underneath (sparklines style) */}
             <div className="flex items-end gap-1.5 h-6 mt-2.5">
-              {[20, 60, 45, 90, 50, 75, 40].map((h, i) => (
+              {weeklyBuckets.map((bar, i) => (
                 <div 
                   key={i} 
                   className={`w-2.5 rounded-[2px] transition-all duration-500
-                    ${i === 3 ? "bg-emerald-700" : "bg-slate-200 hover:bg-slate-300"}
+                    ${bar.active ? "bg-emerald-700" : "bg-slate-200 hover:bg-slate-300"}
                   `}
-                  style={{ height: `${h}%` }}
+                  style={{ height: bar.height }}
                 />
               ))}
             </div>

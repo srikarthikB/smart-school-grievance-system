@@ -8,22 +8,14 @@ import {
   X, 
   User, 
   Layers, 
-  Paperclip, 
   ChevronRight, 
   Clock, 
   ClipboardCheck, 
   AlertCircle, 
   CheckCircle2, 
-  Plus, 
   History, 
-  MessageSquare, 
   FileText, 
-  TrendingUp, 
-  Send,
-  Download,
-  AlertTriangle,
   ArrowUpRight,
-  ShieldAlert,
   Info
 } from "lucide-react";
 
@@ -32,7 +24,7 @@ export default function StaffComplaints() {
   
   // Real complaints fetched from backend
   const [assignedComplaints, setAssignedComplaints] = useState([]);
-  const [allComplaints, setAllComplaints] = useState([]);
+  const [loadError, setLoadError] = useState("");
   const [loading, setLoading] = useState(true);
   
   // Active selected complaint for the Right Detail panel
@@ -41,35 +33,30 @@ export default function StaffComplaints() {
   // State for interactive features
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All"); // All, Submitted, Review, Action, Resolved
-  const [remarksMap, setRemarksMap] = useState({});
-  const [newRemarkText, setNewRemarkText] = useState("");
-  const [showRemarkInput, setShowRemarkInput] = useState(false);
   const [showStatusPopover, setShowStatusPopover] = useState(false);
   const [actionSuccessMessage, setActionSuccessMessage] = useState("");
   const [statusDraft, setStatusDraft] = useState("Under Review");
   const [resolutionNotesDraft, setResolutionNotesDraft] = useState("");
 
-  // Load complaints and stats from the localStorage/mock database
   const loadData = async () => {
     try {
       setLoading(true);
+      setLoadError("");
       const resAssigned = await api.get("/complaints/assigned");
-      const resAll = await api.get("/complaints");
-      
       const assigned = resAssigned.data || [];
-      const all = resAll.data || [];
       
       setAssignedComplaints(assigned);
-      setAllComplaints(all);
 
-      // Auto-select first assigned complaint on mount if available, or first general complaint
       if (assigned.length > 0) {
-        setSelectedComplaint(assigned[0]);
-      } else if (all.length > 0) {
-        setSelectedComplaint(all[0]);
+        setSelectedComplaint((current) => assigned.find((c) => c.id === current?.id) || assigned[0]);
+      } else {
+        setSelectedComplaint(null);
       }
     } catch (err) {
       console.error("Failed to load staff complaints", err);
+      setAssignedComplaints([]);
+      setSelectedComplaint(null);
+      setLoadError(err.response?.data?.detail || "Could not load assigned complaints.");
     } finally {
       setLoading(false);
     }
@@ -77,16 +64,6 @@ export default function StaffComplaints() {
 
   useEffect(() => {
     loadData();
-    
-    // Load local remarks database from storage to keep remarks active and persistent
-    const storedRemarks = localStorage.getItem("staff_remarks_history");
-    if (storedRemarks) {
-      try {
-        setRemarksMap(JSON.parse(storedRemarks));
-      } catch (e) {
-        console.error("Error loading staff remarks", e);
-      }
-    }
   }, []);
 
   // Sync draft states when chosen complaint switches
@@ -94,7 +71,6 @@ export default function StaffComplaints() {
     if (selectedComplaint) {
       setStatusDraft(selectedComplaint.status || "Under Review");
       setResolutionNotesDraft(selectedComplaint.resolution_notes || "");
-      setShowRemarkInput(false);
       setShowStatusPopover(false);
       setActionSuccessMessage("");
     }
@@ -102,9 +78,7 @@ export default function StaffComplaints() {
 
   // Handle Search & Filter logic
   const filteredComplaints = useMemo(() => {
-    // Determine list to filter:
-    // If we're showing "Assigned", list assigned. But let's let staff see all complaints if assigned list is too small!
-    const targetSource = assignedComplaints.length > 0 ? assignedComplaints : allComplaints;
+    const targetSource = assignedComplaints;
 
     return targetSource.filter((c) => {
       // 1. Search term (by creator name, title, or category)
@@ -135,48 +109,7 @@ export default function StaffComplaints() {
 
       return matchesSearch && matchesStatus;
     });
-  }, [assignedComplaints, allComplaints, searchTerm, statusFilter]);
-
-  // Add a persistent remark
-  const handleAddRemark = (e) => {
-    if (e) e.preventDefault();
-    if (!newRemarkText.trim() || !selectedComplaint) return;
-
-    const complaintId = selectedComplaint.id;
-    const currentRemarks = remarksMap[complaintId] || [];
-    const newRemark = {
-      id: "rem-" + Date.now(),
-      author: user?.name || "Unassigned",
-      text: newRemarkText.trim(),
-      timestamp: new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) + " â€¢ Today"
-    };
-
-    const updatedRemarks = [...currentRemarks, newRemark];
-    const newRemarksMap = {
-      ...remarksMap,
-      [complaintId]: updatedRemarks
-    };
-
-    setRemarksMap(newRemarksMap);
-    localStorage.setItem("staff_remarks_history", JSON.stringify(newRemarksMap));
-    setNewRemarkText("");
-    setShowRemarkInput(false);
-    setActionSuccessMessage("Remark added securely.");
-    setTimeout(() => setActionSuccessMessage(""), 4000);
-  };
-
-  // Escalate case to High priority
-  const handleEscalateCase = async () => {
-    if (!selectedComplaint) return;
-    try {
-      await api.patch(`/complaints/${selectedComplaint.id}`, { priority: "High" });
-      setActionSuccessMessage("Case successfully escalated to High priority.");
-      setTimeout(() => setActionSuccessMessage(""), 4000);
-      loadData();
-    } catch (err) {
-      console.error("Escalation failed", err);
-    }
-  };
+  }, [assignedComplaints, searchTerm, statusFilter]);
 
   // Update Status & resolution logs
   const handleConfirmStatusUpdate = async (e) => {
@@ -191,19 +124,16 @@ export default function StaffComplaints() {
       setActionSuccessMessage(`Updated status to "${statusDraft}" successfully.`);
       setTimeout(() => setActionSuccessMessage(""), 4000);
       
-      // Reload lists and refresh currently selected instance
-      const resAll = await api.get("/complaints");
       const resAssigned = await api.get("/complaints/assigned");
-      setAllComplaints(resAll.data || []);
       setAssignedComplaints(resAssigned.data || []);
       
-      // Update selected reference local parameter
-      const freshInstance = (resAll.data || []).find(c => c.id === selectedComplaint.id);
+      const freshInstance = (resAssigned.data || []).find(c => c.id === selectedComplaint.id);
       if (freshInstance) {
         setSelectedComplaint(freshInstance);
       }
     } catch (err) {
       console.error("Failed to update status", err);
+      setActionSuccessMessage(err.response?.data?.detail || "Failed to update status.");
     }
   };
 
@@ -316,7 +246,7 @@ export default function StaffComplaints() {
           <div className="space-y-1.5 text-left">
             <span className="text-xs font-bold text-slate-500 block">Submitted Review</span>
             <span className="text-3xl font-black text-slate-800 block">
-              {allComplaints.filter(c => c.status !== "Resolved" && c.status !== "Rejected").length}
+              {assignedComplaints.filter(c => c.status !== "Resolved" && c.status !== "Rejected").length}
             </span>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-rose-50 text-rose-700 flex items-center justify-center border border-rose-100/50">
@@ -329,7 +259,7 @@ export default function StaffComplaints() {
           <div className="space-y-1.5 text-left">
             <span className="text-xs font-bold text-slate-500 block">Resolved (Monthly)</span>
             <span className="text-3xl font-black text-slate-800 block">
-              {allComplaints.filter(c => c.status === "Resolved").length}
+              {assignedComplaints.filter(c => c.status === "Resolved").length}
             </span>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-[#ecfdf5] text-emerald-700 flex items-center justify-center border border-emerald-100/55">
@@ -387,6 +317,16 @@ export default function StaffComplaints() {
             <div className="bg-white border border-slate-200 p-12 rounded-3xl text-center">
               <div className="h-8 w-8 animate-spin border-2 border-emerald-800 border-t-transparent rounded-full mx-auto" />
               <p className="text-xs text-slate-400 font-bold mt-3">Refreshing grievances database...</p>
+            </div>
+          ) : loadError ? (
+            <div className="bg-white rounded-3xl p-12 text-center border border-rose-100 flex flex-col items-center justify-center gap-4">
+              <div className="h-14 w-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center border border-rose-100">
+                <AlertCircle className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-sm font-extrabold text-slate-800">Unable to load assigned complaints</p>
+                <p className="text-xs text-slate-400 font-semibold mt-1">{loadError}</p>
+              </div>
             </div>
           ) : filteredComplaints.length === 0 ? (
             <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80 flex flex-col items-center justify-center gap-4">
@@ -513,36 +453,8 @@ export default function StaffComplaints() {
                 </span>
                 
                 <div className="grid grid-cols-1 gap-2">
-                  <div className="bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-xl p-3 flex items-center justify-between gap-3 transition-colors">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <FileText className="h-4.5 w-4.5 text-emerald-800 shrink-0" />
-                      <div className="text-left min-w-0">
-                        <p className="text-[11px] font-extrabold text-slate-700 truncate">marked_evidence_proof.jpg</p>
-                        <span className="text-[9px] text-slate-400 font-bold uppercase block mt-0.5">Image &bull; 1.8 MB</span>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => alert("Downloading evidence attachment binary files from school archive...")}
-                      className="p-1 px-2.5 bg-white border border-slate-200 hover:border-[#0c3127] rounded-lg text-slate-400 hover:text-[#0c3127] cursor-pointer"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="bg-slate-50/50 hover:bg-slate-50 border border-slate-100 rounded-xl p-3 flex items-center justify-between gap-3 transition-colors">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <FileText className="h-4.5 w-4.5 text-emerald-800 shrink-0" />
-                      <div className="text-left min-w-0">
-                        <p className="text-[11px] font-extrabold text-slate-700 truncate">formal_grades_transcript.pdf</p>
-                        <span className="text-[9px] text-slate-400 font-bold uppercase block mt-0.5">PDF Document &bull; 450 KB</span>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => alert("Downloading evidence attachment binary files from school archive...")}
-                      className="p-1 px-2.5 bg-white border border-slate-200 hover:border-[#0c3127] rounded-lg text-slate-400 hover:text-[#0c3127] cursor-pointer"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                    </button>
+                  <div className="bg-slate-50/50 border border-dashed border-slate-200 rounded-xl p-4 text-center">
+                    <span className="text-[11px] text-slate-400 italic font-semibold">No backend attachment data available.</span>
                   </div>
                 </div>
               </div>
@@ -560,16 +472,9 @@ export default function StaffComplaints() {
                   <div className="relative pl-5 flex items-start gap-2">
                     <div className="absolute left-[0.2px] top-1.5 h-2 w-2 rounded-full bg-emerald-800 ring-4 ring-emerald-50" />
                     <div>
-                      <span className="text-[9px] text-slate-400 font-bold block">No date</span>
-                      <strong className="text-[11px] text-slate-800 block">Case selected for review</strong>
-                    </div>
-                  </div>
-
-                  <div className="relative pl-5 flex items-start gap-2">
-                    <div className="absolute left-[0.2px] top-1.5 h-2 w-2 rounded-full bg-slate-300 ring-4 ring-slate-100" />
-                    <div>
-                      <span className="text-[9px] text-slate-400 font-bold block">{displayTime(selectedComplaint.created_at)}</span>
-                      <strong className="text-[11px] text-slate-500 block">Complaint Submitted &amp; Verified</strong>
+                      <span className="text-[9px] text-slate-400 font-bold block">{displayTime(selectedComplaint.updated_at)}</span>
+                      <strong className="text-[11px] text-slate-800 block">{selectedComplaint.status || "Submitted"}</strong>
+                      <span className="text-[11px] text-slate-500 block">{selectedComplaint.resolution_notes || "No resolution notes logged."}</span>
                     </div>
                   </div>
                 </div>
@@ -578,54 +483,14 @@ export default function StaffComplaints() {
               {/* Staff Remarks Section */}
               <div className="space-y-3">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block pb-0.5 border-b border-slate-50">
-                  STAFF REMARKS HISTORY
+                  RESOLUTION NOTES
                 </span>
 
-                {/* List added remarks */}
-                {(!remarksMap[selectedComplaint.id] || remarksMap[selectedComplaint.id].length === 0) ? (
-                  <div className="bg-slate-50/50 border border-dashed border-slate-200 rounded-xl p-4 text-center">
-                    <span className="text-[11px] text-slate-400 italic font-semibold">No remarks added yet.</span>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2 max-h-36 overflow-y-auto">
-                    {remarksMap[selectedComplaint.id].map((rem) => (
-                      <div key={rem.id} className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex flex-col gap-1">
-                        <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
-                          <span className="text-slate-700 font-black">{rem.author}</span>
-                          <span>{rem.timestamp}</span>
-                        </div>
-                        <p className="text-xs text-slate-600 font-medium leading-relaxed">{rem.text}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Inline Remark form trigger */}
-                {showRemarkInput ? (
-                  <form onSubmit={handleAddRemark} className="flex gap-2 pt-1 animate-fade-in">
-                    <input 
-                      type="text"
-                      required
-                      value={newRemarkText}
-                      onChange={(e) => setNewRemarkText(e.target.value)}
-                      placeholder="Type a new remark to save forever..."
-                      className="flex-1 bg-slate-50 border border-slate-200 text-xs font-semibold p-2.5 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-800"
-                    />
-                    <button 
-                      type="submit"
-                      className="px-4 py-2.5 bg-[#0c3127] text-white rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer hover:bg-[#0f4033]"
-                    >
-                      Save
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => setShowRemarkInput(false)}
-                      className="p-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-400 hover:text-slate-700"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </form>
-                ) : null}
+                <div className="bg-slate-50/50 border border-dashed border-slate-200 rounded-xl p-4">
+                  <span className="text-[11px] text-slate-500 font-semibold whitespace-pre-wrap">
+                    {selectedComplaint.resolution_notes || "No resolution notes added yet."}
+                  </span>
+                </div>
               </div>
 
               {/* Status Update / Action Drawer/Form */}
@@ -680,24 +545,6 @@ export default function StaffComplaints() {
               ) : null}
 
               {/* Administrative controller workflow dual action keys */}
-              <div className="grid grid-cols-2 gap-3.5 border-t border-slate-100 pt-5">
-                <button 
-                  onClick={() => setShowRemarkInput(true)}
-                  className="inline-flex items-center justify-center gap-1.5 border border-slate-200 hover:border-emerald-600 bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-900 text-xs font-bold py-3 px-4 rounded-xl transition-all cursor-pointer shadow-3xs"
-                >
-                  <Plus className="h-4 w-4" />
-                  Add Remark
-                </button>
-
-                <button 
-                  onClick={handleEscalateCase}
-                  className="inline-flex items-center justify-center gap-1.5 border border-slate-200 hover:border-rose-300 bg-white hover:bg-rose-50/45 text-slate-700 hover:text-rose-900 text-xs font-bold py-3 px-4 rounded-xl transition-all cursor-pointer shadow-3xs"
-                >
-                  <AlertTriangle className="h-4 w-4 text-rose-500" />
-                  Escalate
-                </button>
-              </div>
-
               {/* Big primary CTA resolution selector toggle button */}
               <button 
                 type="button"

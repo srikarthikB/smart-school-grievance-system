@@ -26,9 +26,7 @@ export default function CreateComplaint() {
     priority: "Medium",
     is_anonymous: false,
   });
-  const [evidenceFiles, setEvidenceFiles] = useState([
-    { name: "tuition_fee_receipt_2026.pdf", size: "1.2 MB", type: "pdf" }
-  ]);
+  const [evidenceFiles] = useState([]);
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -52,15 +50,6 @@ export default function CreateComplaint() {
     setStep((prev) => Math.max(prev - 1, 1));
   };
 
-  // Add dummy evidence file on click
-  const addDummyFile = () => {
-    const names = ["screenshot_error_portal.jpg", "hostel_complaint_photo.png", "academic_transcript_copy.pdf", "bus_receipt.pdf"];
-    const randomName = names[Math.floor(Math.random() * names.length)];
-    const size = (Math.random() * 2 + 0.1).toFixed(1) + " MB";
-    const type = randomName.split(".").pop();
-    setEvidenceFiles([...evidenceFiles, { name: randomName, size, type }]);
-  };
-
   // Drag handlers for evidence card
   const handleDrag = (e) => {
     e.preventDefault();
@@ -76,12 +65,6 @@ export default function CreateComplaint() {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    addDummyFile();
-  };
-
-  // Remove evidence handler
-  const removeFile = (index) => {
-    setEvidenceFiles(evidenceFiles.filter((_, i) => i !== index));
   };
 
   async function submit(e) {
@@ -278,9 +261,8 @@ export default function CreateComplaint() {
               onDragOver={handleDrag}
               onDragLeave={handleDrag}
               onDrop={handleDrop}
-              onClick={addDummyFile}
               className={`
-                border-2 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center gap-3 transition-colors duration-200 cursor-pointer text-center
+                border-2 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center gap-3 transition-colors duration-200 text-center
                 ${dragActive 
                   ? "border-emerald-600 bg-emerald-50/50" 
                   : "border-slate-200 hover:border-emerald-500 hover:bg-slate-50/50"}
@@ -311,13 +293,6 @@ export default function CreateComplaint() {
                           <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{file.size}</p>
                         </div>
                       </div>
-                      <button 
-                        onClick={() => removeFile(idx)}
-                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                        title="Remove Document"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
                     </div>
                   ))}
                 </div>

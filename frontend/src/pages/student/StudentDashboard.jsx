@@ -59,7 +59,12 @@ export default function StudentDashboard() {
   const [tempProfile, setTempProfile] = useState({ ...profile });
 
   useEffect(() => {
-    api.get("/complaints/mine").then((res) => setComplaints(res.data));
+    api.get("/complaints/mine")
+      .then((res) => setComplaints(res.data || []))
+      .catch((err) => {
+        console.error("Failed to load student dashboard complaints", err);
+        setComplaints([]);
+      });
   }, []);
 
   // Update tempProfile when profile changes
@@ -71,7 +76,12 @@ export default function StudentDashboard() {
   useEffect(() => {
     if (user?.name) {
       setProfile((prev) => {
-        const updated = { ...prev, name: user.name, department: user.department || prev.department };
+        const updated = {
+          ...prev,
+          name: user.name,
+          studentId: user.id ? `STU-${user.id}` : prev.studentId,
+          department: user.department || prev.department
+        };
         localStorage.setItem("student_profile_v2", JSON.stringify(updated));
         return updated;
       });

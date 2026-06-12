@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { Navigate, Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import "./styles.css";
 import { AuthProvider } from "./auth/AuthContext.jsx";
+import { useAuth } from "./auth/AuthContext.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import AppLayout from "./components/AppLayout.jsx";
 import Login from "./pages/Login.jsx";
@@ -50,7 +51,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 );
 
 function RoleHome() {
-  const user = JSON.parse(localStorage.getItem("user") || "null");
+  const { user } = useAuth();
   if (user?.role === "admin") return <Navigate to="/admin" replace />;
   if (user?.role === "staff") return <Navigate to="/staff" replace />;
   return <Navigate to="/student" replace />;

@@ -27,6 +27,9 @@ export default function MyComplaints() {
   useEffect(() => {
     api.get("/complaints/mine").then((res) => {
       setComplaints(res.data || []);
+    }).catch((err) => {
+      console.error("Failed to load complaints", err);
+      setComplaints([]);
     });
   }, []);
 
@@ -206,7 +209,7 @@ export default function MyComplaints() {
             filteredComplaints.map((c) => {
               const { stepIndex, label } = getStepState(c.status);
               
-              // Custom Badges for exact status matching the mockup style
+              // Custom badges for exact backend status matching
               let badgeColor = "bg-slate-55 bg-slate-100 text-slate-800";
               if (c.status === "In Progress") {
                 badgeColor = "bg-rose-50 text-rose-800 border-rose-100/50 border";
@@ -344,13 +347,6 @@ export default function MyComplaints() {
               <p className="text-[11px] font-semibold text-slate-400 mt-1">Average Resolution Time</p>
             </div>
             
-            {/* Speed Improvement statistics indicator */}
-            <div className="bg-[#f0fdf4] border border-[#d1fae5] rounded-2xl p-3.5 flex items-center gap-2.5 text-emerald-800">
-              <TrendingUp className="h-4 w-4 shrink-0 text-emerald-600" />
-              <p className="text-xs font-extrabold tracking-tight">
-                12% faster than last month
-              </p>
-            </div>
           </div>
 
           {/* Timeline Update component */}

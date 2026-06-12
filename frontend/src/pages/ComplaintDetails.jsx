@@ -11,16 +11,11 @@ import {
   Printer, 
   Download, 
   Send, 
-  UploadCloud, 
   Check, 
-  File, 
-  TrendingUp, 
-  User, 
   ArrowLeft, 
   History, 
   UserCheck,
-  AlertCircle,
-  Undo
+  AlertCircle
 } from "lucide-react";
 
 export default function ComplaintDetails() {
@@ -33,17 +28,23 @@ export default function ComplaintDetails() {
   const [status, setStatus] = useState("Under Review");
   const [notes, setNotes] = useState("");
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
 
-  const [chatMessage, setChatMessage] = useState("");
-  const [customMessages, setCustomMessages] = useState([]);
   const [attachments, setAttachments] = useState([]);
 
   function load() {
-    api.get(`/complaints/${id}`).then((res) => {
-      setComplaint(res.data);
-      setStatus(res.data.status);
-      setNotes(res.data.resolution_notes || "");
-    });
+    setLoadError("");
+    api.get(`/complaints/${id}`)
+      .then((res) => {
+        setComplaint(res.data);
+        setStatus(res.data.status);
+        setNotes(res.data.resolution_notes || "");
+      })
+      .catch((err) => {
+        console.error("Failed to load complaint", err);
+        setComplaint(null);
+        setLoadError(err.response?.data?.detail || "Could not load complaint.");
+      });
     api.get(`/feedback/${id}`)
       .then((res) => setFeedback(res.data))
       .catch(() => setFeedback(null));
@@ -66,26 +67,21 @@ export default function ComplaintDetails() {
     }
   }
 
-  // Handle adding a communication message locally
-  const sendUserMessage = (e) => {
-    if (e) e.preventDefault();
-    if (!chatMessage.trim()) return;
-    
-    const newMsg = {
-      sender: user?.name || "Student (You)",
-      role: user?.role || "student",
-      text: chatMessage,
-      time: "Just now"
-    };
-    setCustomMessages([...customMessages, newMsg]);
-    setChatMessage("");
-  };
-
   if (!complaint) {
     return (
       <div className="max-w-7xl mx-auto py-24 text-center">
-        <div className="animate-spin h-8 w-8 border-2 border-emerald-800 border-t-transparent rounded-full mx-auto" />
-        <p className="text-xs text-slate-400 font-bold mt-3">Fetching grievance parameters...</p>
+        {loadError ? (
+          <div className="bg-white rounded-3xl border border-rose-100 p-10 max-w-md mx-auto">
+            <AlertCircle className="h-8 w-8 text-rose-500 mx-auto" />
+            <p className="text-sm text-slate-800 font-extrabold mt-3">Unable to load complaint</p>
+            <p className="text-xs text-slate-400 font-bold mt-1">{loadError}</p>
+          </div>
+        ) : (
+          <>
+            <div className="animate-spin h-8 w-8 border-2 border-emerald-800 border-t-transparent rounded-full mx-auto" />
+            <p className="text-xs text-slate-400 font-bold mt-3">Fetching grievance parameters...</p>
+          </>
+        )}
       </div>
     );
   }
@@ -366,51 +362,10 @@ export default function ComplaintDetails() {
             </div>
 
             <div className="p-6 sm:p-8 flex flex-col gap-6">
-              {customMessages.length === 0 && (
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center">
-                  <p className="text-xs font-extrabold text-slate-800">No communication records available</p>
-                  <p className="text-[11px] text-slate-400 font-semibold mt-1">Messages will appear here when backend data is available.</p>
-                </div>
-              )}
-
-              {/* Custom interactive messages */}
-              {customMessages.map((msg, i) => (
-                <div key={i} className="flex gap-4 items-start justify-end">
-                  <div className="flex flex-col gap-1 items-end max-w-xl">
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[10px] text-slate-400 font-bold">{msg.time}</span>
-                      <span className="text-xs font-black text-emerald-900">{msg.sender}</span>
-                    </div>
-                    <div className="bg-emerald-50 border border-emerald-100 rounded-2xl rounded-tr-xs p-4 text-xs font-semibold text-emerald-800 leading-relaxed text-left">
-                      {msg.text}
-                    </div>
-                  </div>
-                  <div className="h-9 w-9 rounded-xl bg-emerald-800 text-white font-black text-xs flex items-center justify-center shrink-0">
-                    {msg.sender.charAt(0)}
-                  </div>
-                </div>
-              ))}
-
-              {/* Chat Textarea and form control */}
-              <form onSubmit={sendUserMessage} className="mt-4 flex flex-col gap-3 pt-6 border-t border-slate-100">
-                <textarea 
-                  value={chatMessage}
-                  onChange={(e) => setChatMessage(e.target.value)}
-                  placeholder="Type your response or request clarification..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#043d2e] min-h-[100px] resize-y"
-                />
-
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-
-                  <button 
-                    type="submit"
-                    className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-[#043d2e] hover:bg-[#074637] text-white text-xs font-extrabold py-2.5 px-6 rounded-xl transition-all cursor-pointer shadow-xs"
-                  >
-                    Send Message
-                    <Send className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </form>
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center">
+                <p className="text-xs font-extrabold text-slate-800">No communication records available</p>
+                <p className="text-[11px] text-slate-400 font-semibold mt-1">Backend communication data is not available for this complaint.</p>
+              </div>
 
             </div>
           </div>
@@ -443,7 +398,7 @@ export default function ComplaintDetails() {
                     </div>
                   </div>
                   <button 
-                    onClick={() => alert(`Simulating file download of: ${file.name}`)}
+                    type="button"
                     className="p-1 px-2.5 border border-slate-150 hover:border-emerald-600 bg-white hover:bg-emerald-50 rounded-lg text-slate-400 hover:text-emerald-800 transition-all cursor-pointer"
                     title="Download Copy"
                   >
