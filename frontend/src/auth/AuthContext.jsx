@@ -1,5 +1,5 @@
 import React from "react";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import api from "../api/client";
 
 const AuthContext = createContext(null);
@@ -8,18 +8,29 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => JSON.parse(localStorage.getItem("user") || "null"));
   const [loading, setLoading] = useState(true);
 
+  const refreshUser = useCallback(async function refreshUser() {
+    if (!localStorage.getItem("token")) {
+      setUser(null);
+      return null;
+    }
+    const res = await api.get("/auth/me");
+    setUser(res.data);
+    localStorage.setItem("user", JSON.stringify(res.data));
+    return res.data;
+  }, []);
+
   useEffect(() => {
     if (localStorage.getItem("token")) {
-      api.get("/auth/me")
-        .then((res) => {
-          setUser(res.data);
-          localStorage.setItem("user", JSON.stringify(res.data));
-        })
+      refreshUser()
         .catch(() => logout())
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
+
+    const handleForcedLogout = () => setUser(null);
+    window.addEventListener("auth:logout", handleForcedLogout);
+    return () => window.removeEventListener("auth:logout", handleForcedLogout);
   }, []);
 
   async function login(email, password) {
@@ -45,7 +56,7 @@ export function AuthProvider({ children }) {
     setUser(null);
   }
 
-  return <AuthContext.Provider value={{ user, loading, login, register, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

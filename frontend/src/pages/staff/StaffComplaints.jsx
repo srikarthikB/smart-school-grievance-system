@@ -1,4 +1,5 @@
 ﻿import React, { useEffect, useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext.jsx";
 import { 
@@ -154,7 +155,7 @@ export default function StaffComplaints() {
     if (s === "resolved") {
       return "bg-[#f0fdf4] text-emerald-800 border border-emerald-100";
     }
-    if (s === "In Progress") {
+    if (s === "in progress") {
       return "bg-rose-50 text-rose-800 border border-rose-150";
     }
     if (s === "under review" || s === "in progress" || s === "review") {
@@ -389,10 +390,14 @@ export default function StaffComplaints() {
                         {c.status || "Submitted"}
                       </span>
 
-                      <span className="inline-flex items-center gap-1 text-emerald-800 text-[11px] font-extrabold hover:underline">
+                      <Link
+                        to={`/complaints/${c.id}`}
+                        onClick={(event) => event.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-emerald-800 text-[11px] font-extrabold hover:underline"
+                      >
                         <span>View Details</span>
                         <ChevronRight className="h-3.5 w-3.5" />
-                      </span>
+                      </Link>
                     </div>
 
                   </div>

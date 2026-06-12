@@ -137,6 +137,12 @@ export default function ComplaintDetails() {
     return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
   };
 
+  const listPath = user?.role === "admin"
+    ? "/admin/complaints"
+    : user?.role === "staff"
+      ? "/staff/complaints"
+      : "/student/complaints";
+
   return (
     <div className="max-w-7xl mx-auto pb-20">
       
@@ -144,7 +150,7 @@ export default function ComplaintDetails() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 text-left">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 text-[11px] text-slate-400 font-bold uppercase tracking-wider">
-            <Link to="/student/complaints" className="hover:text-emerald-800 transition-colors">
+            <Link to={listPath} className="hover:text-emerald-800 transition-colors">
               Grievance Portal
             </Link>
             <span>/</span>
@@ -166,7 +172,7 @@ export default function ComplaintDetails() {
             Print PDF
           </button>
           <Link 
-            to="/student/complaints"
+            to={listPath}
             className="inline-flex items-center gap-1.5 bg-[#043d2e] hover:bg-[#074737] text-white text-xs font-extrabold py-2.5 px-4 rounded-xl transition-all cursor-pointer"
           >
             <ArrowLeft className="h-4 w-4" />

@@ -37,11 +37,12 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="/student/complaints" element={<ProtectedRoute roles={["student"]}><MyComplaints /></ProtectedRoute>} />
             <Route path="/student/complaints/:id/feedback" element={<ProtectedRoute roles={["student"]}><FeedbackForm /></ProtectedRoute>} />
             <Route path="/staff" element={<ProtectedRoute roles={["staff"]}><StaffComplaints /></ProtectedRoute>} />
+            <Route path="/staff/complaints" element={<ProtectedRoute roles={["staff"]}><StaffComplaints /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/complaints" element={<ProtectedRoute roles={["admin"]}><ComplaintManagement /></ProtectedRoute>} />
             <Route path="/admin/users" element={<ProtectedRoute roles={["admin"]}><UserManagement /></ProtectedRoute>} />
             <Route path="/admin/analytics" element={<ProtectedRoute roles={["admin"]}><AnalyticsDashboard /></ProtectedRoute>} />
-            <Route path="/complaints/:id" element={<ComplaintDetails />} />
+            <Route path="/complaints/:id" element={<ProtectedRoute roles={["student", "staff", "admin"]}><ComplaintDetails /></ProtectedRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

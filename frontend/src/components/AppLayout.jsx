@@ -64,7 +64,7 @@ export default function AppLayout() {
       },
       {
         label: "Active Cases",
-        path: "/staff",
+        path: "/staff/complaints",
         icon: ClipboardCheck,
         isActiveCasesLink: true
       },
@@ -177,9 +177,9 @@ export default function AppLayout() {
               
               if (user?.role === "staff") {
                 // For staff console sidebar "Active Cases" is highlighted by default on /staff
-                if (item.isActiveCasesLink && location.pathname === "/staff") {
+                if (item.isActiveCasesLink && (location.pathname === "/staff" || location.pathname === "/staff/complaints")) {
                   isActive = true;
-                } else if (item.isDashboardLink && location.pathname === "/staff") {
+                } else if (item.isDashboardLink && (location.pathname === "/staff" || location.pathname === "/staff/complaints")) {
                   isActive = false;
                 }
               }
