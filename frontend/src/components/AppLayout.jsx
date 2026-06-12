@@ -176,11 +176,13 @@ export default function AppLayout() {
               let isActive = location.pathname === item.path;
               
               if (user?.role === "staff") {
-                // For staff console sidebar "Active Cases" is highlighted by default on /staff
-                if (item.isActiveCasesLink && (location.pathname === "/staff" || location.pathname === "/staff/complaints")) {
-                  isActive = true;
-                } else if (item.isDashboardLink && (location.pathname === "/staff" || location.pathname === "/staff/complaints")) {
-                  isActive = false;
+                // Dashboard is only active on exactly /staff
+                if (item.isDashboardLink) {
+                  isActive = location.pathname === "/staff";
+                }
+                // Active Cases is only active on /staff/complaints
+                if (item.isActiveCasesLink) {
+                  isActive = location.pathname === "/staff/complaints";
                 }
               }
 
@@ -253,5 +255,3 @@ export default function AppLayout() {
     </div>
   );
 }
-
-

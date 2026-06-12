@@ -14,6 +14,7 @@ import MyComplaints from "./pages/student/MyComplaints.jsx";
 import ComplaintDetails from "./pages/ComplaintDetails.jsx";
 import FeedbackForm from "./pages/student/FeedbackForm.jsx";
 import StaffComplaints from "./pages/staff/StaffComplaints.jsx";
+import StaffDashboard from "./pages/staff/StaffDashboard.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import ComplaintManagement from "./pages/admin/ComplaintManagement.jsx";
 import UserManagement from "./pages/admin/UserManagement.jsx";
@@ -39,7 +40,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="/student/create" element={<ProtectedRoute roles={["student"]}><CreateComplaint /></ProtectedRoute>} />
             <Route path="/student/complaints" element={<ProtectedRoute roles={["student"]}><MyComplaints /></ProtectedRoute>} />
             <Route path="/student/complaints/:id/feedback" element={<ProtectedRoute roles={["student"]}><FeedbackForm /></ProtectedRoute>} />
-            <Route path="/staff" element={<ProtectedRoute roles={["staff"]}><StaffComplaints /></ProtectedRoute>} />
+            <Route path="/staff" element={<ProtectedRoute roles={["staff"]}><StaffDashboard /></ProtectedRoute>} />
             <Route path="/staff/complaints" element={<ProtectedRoute roles={["staff"]}><StaffComplaints /></ProtectedRoute>} />
             <Route path="/admin" element={<ProtectedRoute roles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
             <Route path="/admin/complaints" element={<ProtectedRoute roles={["admin"]}><ComplaintManagement /></ProtectedRoute>} />
