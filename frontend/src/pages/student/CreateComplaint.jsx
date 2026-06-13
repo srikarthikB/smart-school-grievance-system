@@ -5,15 +5,14 @@ import {
   Lock, 
   ArrowRight, 
   ArrowLeft, 
-  UploadCloud, 
-  Trash2, 
   File, 
   MessageSquare, 
   CheckCircle2, 
   AlertTriangle,
   FileText,
   BadgeAlert,
-  FolderOpen
+  Paperclip,
+  Info
 } from "lucide-react";
 
 export default function CreateComplaint() {
@@ -26,8 +25,6 @@ export default function CreateComplaint() {
     priority: "Medium",
     is_anonymous: false,
   });
-  const [evidenceFiles] = useState([]);
-  const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -48,23 +45,6 @@ export default function CreateComplaint() {
   const handlePrevStep = () => {
     setError("");
     setStep((prev) => Math.max(prev - 1, 1));
-  };
-
-  // Drag handlers for evidence card
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
   };
 
   async function submit(e) {
@@ -91,7 +71,7 @@ export default function CreateComplaint() {
         </p>
       </div>
 
-      {/* Progress Multi-step Tracker matches the Stitch Mock */}
+      {/* Progress Multi-step Tracker */}
       <div className="mb-10 relative">
         <div className="absolute top-5 left-0 w-full h-[1px] bg-slate-200 z-0" />
         
@@ -108,7 +88,6 @@ export default function CreateComplaint() {
               <div 
                 key={s.num} 
                 onClick={() => {
-                  // Only allow jumping back / or jumping ahead if details valid
                   if (s.num < step) {
                     setStep(s.num);
                   } else if (s.num === 2 && isDetailsValid()) {
@@ -182,57 +161,58 @@ export default function CreateComplaint() {
               </div>
             </div>
 
-            {/* Subject Input Field */}
+            {/* Priority Selector */}
             <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-slate-700">Subject</label>
+              <label className="text-xs font-bold text-slate-700">Priority Level</label>
+              <div className="flex gap-3">
+                {["Low", "Medium", "High"].map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setForm({ ...form, priority: p })}
+                    className={`flex-1 py-2.5 rounded-xl text-xs font-bold border transition-all cursor-pointer
+                      ${form.priority === p 
+                        ? p === "High" 
+                          ? "bg-red-600 text-white border-red-600" 
+                          : p === "Medium" 
+                            ? "bg-amber-500 text-white border-amber-500" 
+                            : "bg-emerald-700 text-white border-emerald-700"
+                        : "bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100"}
+                    `}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Title Input */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-bold text-slate-700">Subject Title</label>
               <input 
-                type="text" 
-                placeholder="Brief summary of the issue"
-                value={form.title} 
+                type="text"
+                value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#043d2e]"
-                required
+                placeholder="Briefly describe the issue..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#043d2e]"
               />
             </div>
 
-            {/* Detailed Description Textarea Field */}
+            {/* Description Textarea */}
             <div className="flex flex-col gap-2">
               <label className="text-xs font-bold text-slate-700">Detailed Description</label>
               <textarea 
-                placeholder="Provide as much detail as possible, including dates, names, and locations."
-                value={form.description} 
+                value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#043d2e] min-h-[160px] resize-y"
-                required
+                placeholder="Provide a full account of the grievance with relevant dates, persons involved, and any prior attempts at resolution..."
+                rows={5}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#043d2e] resize-y"
               />
             </div>
 
-            {/* Priority Config Dropdown Field */}
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-bold text-slate-700">Priority Level</label>
-              <div className="relative">
-                <select 
-                  value={form.priority} 
-                  onChange={(e) => setForm({ ...form, priority: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#043d2e] appearance-none"
-                >
-                  {["Low", "Medium", "High"].map((item) => (
-                    <option key={item} value={item}>{item}</option>
-                  ))}
-                </select>
-                <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-slate-400">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-
-            {/* Confidentiality Notice Alert Panel */}
-            <div className="bg-[#f0f9f6] border border-[#d1ebd9] rounded-2xl p-5 flex gap-4 mt-2">
-              <div className="h-9 w-9 bg-[#e0f4ea] rounded-xl flex items-center justify-center text-emerald-800 shrink-0">
-                <Lock className="h-4.5 w-4.5" />
-              </div>
+            {/* Confidentiality Notice */}
+            <div className="flex items-start gap-3 bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4">
+              <Lock className="h-4 w-4 text-[#064e3b] shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <p className="text-xs font-extrabold text-[#064e3b]">Confidentiality Notice</p>
                 <p className="text-[11px] text-[#2c533e] leading-relaxed font-semibold">
@@ -243,7 +223,7 @@ export default function CreateComplaint() {
           </div>
         )}
 
-        {/* STEP 2: EVIDENCE UPLOAD */}
+        {/* STEP 2: EVIDENCE — attachment support planned for a future release */}
         {step === 2 && (
           <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between">
@@ -252,52 +232,25 @@ export default function CreateComplaint() {
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-              Attach receipts, screenshots, timetable logs, or correspondence records to bolster your grievance classification speed.
+              Attach receipts, screenshots, timetable logs, or correspondence records to bolster your grievance. Attachment support is coming in a future release.
             </p>
 
-            {/* Interactive File Drag & Drop Field */}
-            <div 
-              onDragEnter={handleDrag}
-              onDragOver={handleDrag}
-              onDragLeave={handleDrag}
-              onDrop={handleDrop}
-              className={`
-                border-2 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center gap-3 transition-colors duration-200 text-center
-                ${dragActive 
-                  ? "border-emerald-600 bg-emerald-50/50" 
-                  : "border-slate-200 hover:border-emerald-500 hover:bg-slate-50/50"}
-              `}
-            >
-              <div className="h-12 w-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-[#064e3b] shadow-xs">
-                <UploadCloud className="h-6 w-6" />
+            {/* Planned feature notice — clearly by design, not an error */}
+            <div className="border border-slate-200 rounded-3xl p-8 flex flex-col items-center justify-center gap-4 text-center bg-slate-50/40">
+              <div className="h-12 w-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400">
+                <Paperclip className="h-6 w-6" />
               </div>
               <div>
-                <p className="text-xs font-bold text-slate-800">Evidence upload is unavailable until backend storage is connected</p>
-                <p className="text-[11px] text-slate-400 font-semibold mt-1">Supports PDF, PNG, JPG up to 10MB each</p>
+                <p className="text-sm font-extrabold text-slate-700">Attachments not yet available</p>
+                <p className="text-xs text-slate-400 font-semibold mt-1 max-w-xs mx-auto leading-relaxed">
+                  Evidence upload is planned for a future release. You can proceed without attachments — your written description will be reviewed by the assigned staff member.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5">
+                <Info className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                <span className="text-[11px] text-amber-700 font-bold">Supports PDF, PNG, JPG — coming soon</span>
               </div>
             </div>
-
-            {/* Uploaded Files Listing */}
-            {evidenceFiles.length > 0 && (
-              <div className="space-y-2 mt-2">
-                <h4 className="text-xs font-bold text-slate-700">Uploaded Proof Documents ({evidenceFiles.length})</h4>
-                <div className="divide-y divide-slate-100 bg-slate-50/50 border border-slate-100 rounded-2xl overflow-hidden">
-                  {evidenceFiles.map((file, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3.5 hover:bg-slate-50 translate-all">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="h-8.5 w-8.5 bg-white border border-slate-200/60 rounded-lg flex items-center justify-center text-emerald-800 shrink-0">
-                          <FileText className="h-4.5 w-4.5" />
-                        </div>
-                        <div className="text-left min-w-0">
-                          <p className="text-xs font-bold text-slate-800 truncate">{file.name}</p>
-                          <p className="text-[10px] text-slate-400 font-semibold mt-0.5">{file.size}</p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -335,22 +288,13 @@ export default function CreateComplaint() {
                 <span className="font-semibold text-slate-600 leading-relaxed whitespace-pre-wrap">{form.description}</span>
               </div>
 
-              {evidenceFiles.length > 0 && (
-                <div className="flex flex-col gap-1.5 md:col-span-2 border-t border-slate-100 pt-3">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Attached Proof Material</span>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {evidenceFiles.map((file, i) => (
-                      <span key={i} className="inline-flex items-center gap-1 bg-white border border-slate-100 rounded-lg px-2.5 py-1.5 text-[10px] text-slate-600 font-bold shadow-2xs">
-                        <File className="h-3.5 w-3.5 text-slate-400" />
-                        {file.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <div className="flex flex-col gap-1.5 md:col-span-2 border-t border-slate-100 pt-3">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Attachments</span>
+                <span className="text-[11px] text-slate-400 font-semibold italic">No attachments — evidence upload coming in a future release.</span>
+              </div>
             </div>
 
-            {/* Custom Interactive Switcher for Anonymity Toggle */}
+            {/* Anonymity Toggle */}
             <div className="p-4 bg-slate-50 border border-slate-200/50 rounded-2xl flex items-center justify-between gap-4">
               <div className="space-y-0.5">
                 <label className="text-xs font-bold text-slate-800 block cursor-pointer" htmlFor="anon-toggle">
@@ -412,4 +356,3 @@ export default function CreateComplaint() {
     </div>
   );
 }
-

@@ -11,30 +11,22 @@ import {
   Info,
 } from "lucide-react";
 
-// ────────────────────────────────────────────────
-// Tiny inline bar component — no external chart lib
-// ────────────────────────────────────────────────
 function BarRow({ label, value, max, color = "#0c3127" }) {
   const pct = max > 0 ? Math.round((value / max) * 100) : 0;
   return (
     <div className="flex items-center gap-3">
-      <span className="text-[11px] font-bold text-slate-600 w-32 shrink-0 truncate">
-        {label}
-      </span>
+      <span className="text-[11px] font-bold text-slate-600 w-32 shrink-0 truncate">{label}</span>
       <div className="flex-1 bg-slate-100 rounded-full h-2 overflow-hidden">
         <div
           className="h-2 rounded-full transition-all duration-500"
           style={{ width: `${pct}%`, backgroundColor: color }}
         />
       </div>
-      <span className="text-[11px] font-black text-slate-700 w-6 text-right shrink-0">
-        {value}
-      </span>
+      <span className="text-[11px] font-black text-slate-700 w-6 text-right shrink-0">{value}</span>
     </div>
   );
 }
 
-// A simple donut-style visual using SVG
 function DonutSegment({ resolved, rejected, pending, total }) {
   if (total === 0)
     return (
@@ -93,9 +85,7 @@ export default function StaffAnalytics() {
         const res = await api.get("/complaints/assigned");
         setComplaints(res.data || []);
       } catch (err) {
-        setLoadError(
-          err.response?.data?.detail || "Could not load analytics data."
-        );
+        setLoadError(err.response?.data?.detail || "Could not load analytics data.");
       } finally {
         setLoading(false);
       }
@@ -116,7 +106,6 @@ export default function StaffAnalytics() {
     const resolutionRate =
       total > 0 ? Math.round(((resolved + rejected) / total) * 100) : 0;
 
-    // Category breakdown
     const categoryMap = {};
     complaints.forEach((c) => {
       const cat = c.category || "Uncategorised";
@@ -126,7 +115,6 @@ export default function StaffAnalytics() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6);
 
-    // Priority breakdown
     const priorityMap = { High: 0, Medium: 0, Low: 0 };
     complaints.forEach((c) => {
       const p = String(c.priority || "").toLowerCase();
@@ -135,7 +123,6 @@ export default function StaffAnalytics() {
       else priorityMap["Low"]++;
     });
 
-    // Avg resolution time (days) for resolved cases that have both dates
     let avgDays = null;
     const timed = complaints.filter(
       (c) =>
@@ -150,7 +137,6 @@ export default function StaffAnalytics() {
       avgDays = (totalMs / timed.length / 86400000).toFixed(1);
     }
 
-    // Monthly trend — group resolved by month (last 6 months)
     const now = new Date();
     const months = Array.from({ length: 6 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
@@ -162,15 +148,9 @@ export default function StaffAnalytics() {
       };
     });
     complaints.forEach((c) => {
-      if (
-        String(c.status || "").toLowerCase() !== "resolved" ||
-        !c.updated_at
-      )
-        return;
+      if (String(c.status || "").toLowerCase() !== "resolved" || !c.updated_at) return;
       const d = new Date(c.updated_at);
-      const hit = months.find(
-        (m) => m.year === d.getFullYear() && m.month === d.getMonth()
-      );
+      const hit = months.find((m) => m.year === d.getFullYear() && m.month === d.getMonth());
       if (hit) hit.count++;
     });
 
@@ -187,14 +167,16 @@ export default function StaffAnalytics() {
     };
   }, [complaints]);
 
+  // Fix: derive maxCategory and maxMonth so BarRow and the bar chart render correctly
+  const maxCategory = stats.categories.length > 0 ? stats.categories[0][1] : 1;
+  const maxMonth = Math.max(...stats.months.map((m) => m.count), 1);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="h-8 w-8 animate-spin border-2 border-emerald-800 border-t-transparent rounded-full mx-auto" />
-          <p className="text-xs text-slate-400 font-bold mt-3">
-            Building analytics…
-          </p>
+          <p className="text-xs text-slate-400 font-bold mt-3">Building analytics…</p>
         </div>
       </div>
     );
@@ -207,96 +189,54 @@ export default function StaffAnalytics() {
           <AlertCircle className="h-6 w-6" />
         </div>
         <div>
-          <p className="text-sm font-extrabold text-slate-800">
-            Analytics unavailable
-          </p>
-          <p className="text-xs text-slate-400 font-semibold mt-1">
-            {loadError}
-          </p>
+          <p className="text-sm font-extrabold text-slate-800">Analytics unavailable</p>
+          <p className="text-xs text-slate-400 font-semibold mt-1">{loadError}</p>
         </div>
       </div>
     );
   }
 
-  const maxMonth = Math.max(...stats.months.map((m) => m.count), 1);
-  const maxCategory = stats.categories[0]?.[1] || 1;
+  const summaryCards = [
+    { label: "Total Assigned", value: stats.total, icon: Layers, accent: "#0c3127" },
+    { label: "Resolved", value: stats.resolved, icon: CheckCircle2, accent: "#059669" },
+    { label: "Rejected", value: stats.rejected, icon: XCircle, accent: "#e11d48" },
+    { label: "Pending", value: stats.pending, icon: Clock, accent: "#f59e0b" },
+  ];
 
   return (
-    <div className="font-sans text-left pb-12 space-y-6">
-      {/* Header */}
+    <div className="space-y-6 pb-12 text-left">
       <div className="border-b border-slate-100 pb-5">
-        <h1 className="text-2xl font-black text-[#0c3127] tracking-tight">
-          Analytics
-        </h1>
+        <h1 className="text-2xl font-black text-[#0c3127] tracking-tight">Analytics</h1>
         <p className="text-xs text-slate-400 font-bold mt-0.5">
-          Performance metrics derived from your assigned caseload
+          Performance metrics based on complaints assigned to you
         </p>
       </div>
 
-      {/* KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          {
-            label: "Total Assigned",
-            value: stats.total,
-            icon: Layers,
-            bg: "bg-slate-50",
-            icon_color: "text-slate-500",
-            border: "border-slate-100",
-          },
-          {
-            label: "Resolved",
-            value: stats.resolved,
-            icon: CheckCircle2,
-            bg: "bg-emerald-50",
-            icon_color: "text-emerald-700",
-            border: "border-emerald-100/50",
-          },
-          {
-            label: "Pending",
-            value: stats.pending,
-            icon: Clock,
-            bg: "bg-amber-50",
-            icon_color: "text-amber-600",
-            border: "border-amber-100/50",
-          },
-          {
-            label: "Rejected",
-            value: stats.rejected,
-            icon: XCircle,
-            bg: "bg-rose-50",
-            icon_color: "text-rose-600",
-            border: "border-rose-100/50",
-          },
-        ].map(({ label, value, icon: Icon, bg, icon_color, border }) => (
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {summaryCards.map(({ label, value, icon: Icon, accent }) => (
           <div
             key={label}
-            className="bg-white rounded-3xl border border-slate-200/90 p-5 flex items-center justify-between shadow-3xs"
+            className="bg-white rounded-3xl border border-slate-200/90 p-5 shadow-3xs flex flex-col gap-3"
           >
-            <div className="space-y-1">
-              <span className="text-[11px] font-bold text-slate-500 block">
-                {label}
-              </span>
-              <span className="text-2xl font-black text-slate-800 block">
-                {value}
-              </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10.5px] font-black uppercase text-slate-400 tracking-wider">{label}</span>
+              <div
+                className="h-8 w-8 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: `${accent}18`, color: accent }}
+              >
+                <Icon className="h-5 w-5" />
+              </div>
             </div>
-            <div
-              className={`h-10 w-10 rounded-2xl ${bg} ${icon_color} flex items-center justify-center border ${border}`}
-            >
-              <Icon className="h-5 w-5" />
-            </div>
+            <span className="text-3xl font-black text-slate-800 tabular-nums leading-none">{value}</span>
           </div>
         ))}
       </div>
 
       {/* Middle row: donut + resolution rate + avg days */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {/* Donut */}
         <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-3xs flex flex-col gap-4">
-          <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
-            Case Breakdown
-          </span>
+          <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Case Breakdown</span>
           <DonutSegment
             resolved={stats.resolved}
             rejected={stats.rejected}
@@ -312,23 +252,16 @@ export default function StaffAnalytics() {
               <div key={label} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`h-2.5 w-2.5 rounded-full ${color}`} />
-                  <span className="text-[11px] font-semibold text-slate-500">
-                    {label}
-                  </span>
+                  <span className="text-[11px] font-semibold text-slate-500">{label}</span>
                 </div>
-                <span className="text-[11px] font-black text-slate-700">
-                  {val}
-                </span>
+                <span className="text-[11px] font-black text-slate-700">{val}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Resolution rate */}
         <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-3xs flex flex-col justify-between gap-4">
-          <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
-            Resolution Rate
-          </span>
+          <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Resolution Rate</span>
           <div className="flex flex-col items-center gap-3">
             <span className="text-6xl font-black text-[#0c3127] tracking-tighter">
               {stats.resolutionRate}
@@ -346,11 +279,8 @@ export default function StaffAnalytics() {
           </p>
         </div>
 
-        {/* Avg resolution time */}
         <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-3xs flex flex-col justify-between gap-4">
-          <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
-            Avg. Resolution Time
-          </span>
+          <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Avg. Resolution Time</span>
           <div className="flex flex-col items-center gap-2">
             {stats.avgDays !== null ? (
               <>
@@ -369,64 +299,42 @@ export default function StaffAnalytics() {
               </>
             ) : (
               <div className="text-center py-4">
-                <span className="text-sm font-extrabold text-slate-400">
-                  No resolved cases yet
-                </span>
-                <p className="text-[11px] text-slate-400 font-semibold mt-1">
-                  Time will be calculated once cases are resolved.
-                </p>
+                <span className="text-sm font-extrabold text-slate-400">No resolved cases yet</span>
+                <p className="text-[11px] text-slate-400 font-semibold mt-1">Time will be calculated once cases are resolved.</p>
               </div>
             )}
           </div>
-          <p className="text-[11px] text-slate-400 font-semibold text-center">
-            From submission to resolution
-          </p>
+          <p className="text-[11px] text-slate-400 font-semibold text-center">From submission to resolution</p>
         </div>
       </div>
 
       {/* Bottom row: category breakdown + monthly trend */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-        {/* Category breakdown */}
         <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-3xs flex flex-col gap-5">
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-[#0c3127]" />
-            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
-              Cases by Category
-            </span>
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Cases by Category</span>
           </div>
-
           {stats.categories.length === 0 ? (
-            <p className="text-[11px] text-slate-400 font-semibold italic">
-              No category data available.
-            </p>
+            <p className="text-[11px] text-slate-400 font-semibold italic">No category data available.</p>
           ) : (
             <div className="flex flex-col gap-3">
               {stats.categories.map(([cat, count]) => (
-                <BarRow
-                  key={cat}
-                  label={cat}
-                  value={count}
-                  max={maxCategory}
-                  color="#0c3127"
-                />
+                <BarRow key={cat} label={cat} value={count} max={maxCategory} color="#0c3127" />
               ))}
             </div>
           )}
         </div>
 
-        {/* Monthly resolved trend */}
         <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-3xs flex flex-col gap-5">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-[#0c3127]" />
-            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
-              Resolutions — Last 6 Months
-            </span>
+            <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Resolutions — Last 6 Months</span>
           </div>
 
           <div className="flex items-end gap-2 h-28 pt-2">
             {stats.months.map((m) => {
-              const heightPct =
-                maxMonth > 0 ? Math.round((m.count / maxMonth) * 100) : 0;
+              const heightPct = maxMonth > 0 ? Math.round((m.count / maxMonth) * 100) : 0;
               return (
                 <div
                   key={`${m.label}-${m.year}`}
@@ -444,9 +352,7 @@ export default function StaffAnalytics() {
                       }}
                     />
                   </div>
-                  <span className="text-[10px] font-bold text-slate-400">
-                    {m.label}
-                  </span>
+                  <span className="text-[10px] font-bold text-slate-400">{m.label}</span>
                 </div>
               );
             })}
@@ -462,22 +368,14 @@ export default function StaffAnalytics() {
 
       {/* Priority distribution */}
       <div className="bg-white rounded-3xl border border-slate-200/90 p-6 shadow-3xs flex flex-col gap-5">
-        <span className="text-xs font-black uppercase text-slate-400 tracking-wider">
-          Priority Distribution
-        </span>
+        <span className="text-xs font-black uppercase text-slate-400 tracking-wider">Priority Distribution</span>
         <div className="flex flex-col gap-3">
           {[
             { label: "High Priority", value: stats.priorityMap["High"], color: "#e11d48" },
             { label: "Medium Priority", value: stats.priorityMap["Medium"], color: "#f59e0b" },
             { label: "Standard", value: stats.priorityMap["Low"], color: "#64748b" },
           ].map(({ label, value, color }) => (
-            <BarRow
-              key={label}
-              label={label}
-              value={value}
-              max={stats.total || 1}
-              color={color}
-            />
+            <BarRow key={label} label={label} value={value} max={stats.total || 1} color={color} />
           ))}
         </div>
       </div>
@@ -488,12 +386,9 @@ export default function StaffAnalytics() {
           <Info className="h-4.5 w-4.5" />
         </div>
         <div>
-          <strong className="text-[10px] font-black uppercase text-[#0c3127] tracking-wider block">
-            Data Scope
-          </strong>
+          <strong className="text-[10px] font-black uppercase text-[#0c3127] tracking-wider block">Data Scope</strong>
           <p className="text-[11px] text-emerald-900 font-medium leading-relaxed mt-0.5">
-            All figures are derived from complaints assigned to your account.
-            Contact your administrator for institution-wide analytics.
+            All figures are derived from complaints assigned to your account. Contact your administrator for institution-wide analytics.
           </p>
         </div>
       </div>

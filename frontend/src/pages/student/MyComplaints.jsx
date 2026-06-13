@@ -6,14 +6,8 @@ import {
   Clock, 
   CheckCircle2, 
   Search, 
-  SlidersHorizontal,
-  TrendingDown,
   Calendar,
-  Compass,
-  UserCheck,
-  User,
   ChevronRight,
-  TrendingUp,
   BookOpen,
   Info
 } from "lucide-react";
@@ -23,6 +17,7 @@ export default function MyComplaints() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [timeFilter, setTimeFilter] = useState("Last 30 Days");
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   useEffect(() => {
     api.get("/complaints/mine").then((res) => {
@@ -49,13 +44,13 @@ export default function MyComplaints() {
     }
   };
 
-  // Convert Status to step mapping
+  // Convert Status to step mapping — compare against lowercase consistently
   const getStepState = (status) => {
     const s = String(status || "").toLowerCase();
     if (s === "resolved") {
       return { stepIndex: 4, label: "Resolved" };
     }
-    if (s === "In Progress" || s === "in progress") {
+    if (s === "in progress") {
       return { stepIndex: 3, label: "Progress" };
     }
     if (s === "under review") {
@@ -66,13 +61,11 @@ export default function MyComplaints() {
 
   // Filter complaints list
   const filteredComplaints = complaints.filter((c) => {
-    // Search match
     const title = (c.title || "").toLowerCase();
     const cat = (c.category || "").toLowerCase();
     const query = searchTerm.toLowerCase();
     const matchesSearch = title.includes(query) || cat.includes(query);
 
-    // Status match
     const matchesStatus = 
       statusFilter === "All Statuses" || 
       (c.status || "").toLowerCase() === statusFilter.toLowerCase();
@@ -89,31 +82,63 @@ export default function MyComplaints() {
     return matchesSearch && matchesStatus && matchesTime;
   });
 
-  // Compile timeline updates dynamically based on user's complaints
-  const timelineUpdates = complaints.slice(0, 3).map((c) => {
-    const dateStr = formatDate(c.created_at);
-    
-    let heading = `New grievance submitted`;
-    let subtext = `Complaint regarding ${c.category || "General"} categorized successfully.`;
-    
-    if (c.status === "Resolved") {
-      heading = `Status changed to "Resolved"`;
-      subtext = c.resolution_notes || "Your issue has been resolved.";
-    } else if (c.status === "In Progress") {
-      heading = `Status changed to "In Progress"`;
-      subtext = `Status updated for grievance #${c.id}.`;
-    } else if (c.status === "In Progress" || c.status === "Under Review") {
-      heading = c.assignee?.name ? `Grievance assigned to ${c.assignee.name}` : "Grievance is under review";
-      subtext = "Investigation is active.";
+  // Build timeline from all complaints — each complaint contributes two entries (created + last update)
+  const allTimelineUpdates = complaints.flatMap((c) => {
+    const entries = [];
+
+    // Submission entry
+    entries.push({
+      id: `${c.id}-created`,
+      complaintId: c.id,
+      time: formatDate(c.created_at),
+      heading: `Grievance #${c.id} submitted`,
+      subtext: `Complaint regarding ${c.category || "General"} categorised successfully.`,
+    });
+
+    // Status update entry (only if status changed from Submitted, or notes exist)
+    const s = String(c.status || "").toLowerCase();
+    if (s !== "submitted" || c.resolution_notes) {
+      let heading = `Status updated to "${c.status}"`;
+      let subtext = c.resolution_notes || `Status updated for grievance #${c.id}.`;
+
+      if (s === "resolved") {
+        heading = `Grievance #${c.id} resolved`;
+        subtext = c.resolution_notes || "Your issue has been resolved.";
+      } else if (s === "in progress") {
+        heading = `Grievance #${c.id} is in progress`;
+        subtext = c.assignee?.name
+          ? `Being handled by ${c.assignee.name}.`
+          : `Active investigation underway.`;
+      } else if (s === "under review") {
+        heading = c.assignee?.name
+          ? `Grievance #${c.id} assigned to ${c.assignee.name}`
+          : `Grievance #${c.id} is under review`;
+        subtext = "Investigation is active.";
+      }
+
+      entries.push({
+        id: `${c.id}-status`,
+        complaintId: c.id,
+        time: formatDate(c.updated_at),
+        heading,
+        subtext,
+      });
     }
 
-    return {
-      id: c.id,
-      time: dateStr,
-      heading,
-      subtext
-    };
+    return entries;
   });
+
+  // Sort timeline by most recent first, use first 3 by default
+  const sortedTimeline = allTimelineUpdates.sort((a, b) => {
+    // Use raw complaint data for accurate sort — fallback to string compare
+    const ca = complaints.find(c => c.id === a.complaintId);
+    const cb = complaints.find(c => c.id === b.complaintId);
+    const da = new Date(ca?.updated_at || ca?.created_at || 0).getTime();
+    const db = new Date(cb?.updated_at || cb?.created_at || 0).getTime();
+    return db - da;
+  });
+
+  const timelineUpdates = showAllHistory ? sortedTimeline : sortedTimeline.slice(0, 3);
 
   const resolvedDurations = complaints
     .filter((c) => c.status === "Resolved" && c.created_at && c.updated_at)
@@ -144,7 +169,6 @@ export default function MyComplaints() {
 
         {/* Filters */}
         <div className="flex items-center gap-3">
-          {/* Status Selection Filter */}
           <div className="relative">
             <select
               value={statusFilter}
@@ -162,7 +186,6 @@ export default function MyComplaints() {
             </div>
           </div>
 
-          {/* Time range selection */}
           <div className="relative">
             <select
               value={timeFilter}
@@ -193,7 +216,7 @@ export default function MyComplaints() {
       {/* Primary Layout Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
-        {/* Left Column Component List: Complaint Cards */}
+        {/* Left Column: Complaint Cards */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           {filteredComplaints.length === 0 ? (
             <div className="bg-white rounded-3xl p-12 text-center border border-slate-100 flex flex-col items-center justify-center gap-4">
@@ -207,18 +230,17 @@ export default function MyComplaints() {
             </div>
           ) : (
             filteredComplaints.map((c) => {
-              const { stepIndex, label } = getStepState(c.status);
+              const { stepIndex } = getStepState(c.status);
               
-              // Custom badges for exact backend status matching
-              let badgeColor = "bg-slate-55 bg-slate-100 text-slate-800";
+              let badgeColor = "bg-slate-100 text-slate-800";
               if (c.status === "In Progress") {
                 badgeColor = "bg-rose-50 text-rose-800 border-rose-100/50 border";
               } else if (c.status === "Under Review") {
                 badgeColor = "bg-emerald-50 text-emerald-800 border-emerald-100/50 border";
               } else if (c.status === "Resolved") {
                 badgeColor = "bg-sky-50 text-sky-800 border-sky-100/50 border";
-              } else if (c.status === "In Progress") {
-                badgeColor = "bg-amber-50 text-amber-800 border-amber-100/50 border";
+              } else if (c.status === "Rejected") {
+                badgeColor = "bg-red-50 text-red-800 border-red-100/50 border";
               }
 
               return (
@@ -226,8 +248,6 @@ export default function MyComplaints() {
                   key={c.id} 
                   className="bg-white rounded-3xl border border-slate-200/60 p-6 sm:p-7 flex flex-col gap-6 shadow-2xs hover:shadow-xs transition-shadow duration-200"
                 >
-                  
-                  {/* Card Header row */}
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
                       #GRV-2026-{String(c.id).padStart(3, "0")}
@@ -237,16 +257,13 @@ export default function MyComplaints() {
                     </span>
                   </div>
 
-                  {/* Grievance Title */}
                   <h3 className="text-slate-900 font-extrabold text-lg -mt-2 leading-snug">
                     {c.title}
                   </h3>
 
-                  {/* Horizontal Progress Track exactly as shown on the Stitch Mock */}
+                  {/* Progress Track */}
                   <div className="relative py-6">
-                    {/* Background connector line */}
                     <div className="absolute top-1/2 left-0 w-full h-[2px] bg-slate-100 -translate-y-1/2" />
-                    
                     <div className="relative flex justify-between">
                       {[
                         { step: 1, label: "Submitted" },
@@ -256,26 +273,24 @@ export default function MyComplaints() {
                       ].map((item) => {
                         const isCompleted = stepIndex > item.step;
                         const isCurrent = stepIndex === item.step;
-
                         return (
                           <div key={item.step} className="flex flex-col items-center">
-                            {/* Milestone Marker design */}
                             <div className={`
                               h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs relative z-10 transition-all duration-300
                               ${isCompleted 
                                 ? "bg-emerald-800 text-white shadow-3xs" 
                                 : isCurrent 
                                   ? "bg-white border-2 border-emerald-800 text-emerald-800 font-extrabold" 
-                                  : "bg-white border-2 border-slate-205 border-slate-200 text-slate-300"}
+                                  : "bg-white border-2 border-slate-200 text-slate-300"}
                             `}>
                               {isCompleted ? (
-                                <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
                                 </svg>
                               ) : isCurrent ? (
                                 <span className="h-2 w-2 rounded-full bg-emerald-800" />
                               ) : (
-                                <span className="h-1.5 w-1.5 rounded-full bg-slate-205 bg-slate-200" />
+                                <span className="h-1.5 w-1.5 rounded-full bg-slate-200" />
                               )}
                             </div>
                             <span className={`
@@ -294,36 +309,27 @@ export default function MyComplaints() {
                   <div className="grid grid-cols-3 gap-4 border-t border-slate-100 pt-5 text-left text-xs bg-slate-50/50 p-4 rounded-2xl">
                     <div className="flex flex-col gap-1">
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Submitted On</span>
-                      <span className="font-extrabold text-slate-800 text-[11px]">
-                        {formatDate(c.created_at)}
-                      </span>
+                      <span className="font-extrabold text-slate-800 text-[11px]">{formatDate(c.created_at)}</span>
                     </div>
-
                     <div className="flex flex-col gap-1">
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Category</span>
-                      <span className="font-extrabold text-slate-800 text-[11px]">
-                        {c.category}
-                      </span>
+                      <span className="font-extrabold text-slate-800 text-[11px]">{c.category}</span>
                     </div>
-
                     <div className="flex flex-col gap-1">
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Assigned To</span>
-                      <span className="font-extrabold text-slate-800 text-[11px] truncate">
-                        {c.assignee?.name || "Unassigned"}
-                      </span>
+                      <span className="font-extrabold text-slate-800 text-[11px] truncate">{c.assignee?.name || "Unassigned"}</span>
                     </div>
                   </div>
 
-                  {/* Details Navigation Button */}
                   <div className="pt-2">
                     <Link 
                       to={`/complaints/${c.id}`}
-                      className="w-full inline-flex items-center justify-center border border-slate-200 hover:bg-slate-50 active:scale-99 text-slate-700 text-xs font-bold py-3 px-4 rounded-xl transition-all cursor-pointer shadow-3xs"
+                      className="w-full inline-flex items-center justify-center border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold py-3 px-4 rounded-xl transition-all cursor-pointer shadow-3xs"
                     >
                       View Details
+                      <ChevronRight className="h-3.5 w-3.5 ml-1" />
                     </Link>
                   </div>
-
                 </div>
               );
             })
@@ -333,7 +339,7 @@ export default function MyComplaints() {
         {/* Right Side Column Panels */}
         <div className="lg:col-span-4 flex flex-col gap-6 w-full">
           
-          {/* Resolution Metrics statistics panel */}
+          {/* Resolution Metrics */}
           <div className="bg-white rounded-3xl border border-slate-200/60 p-6 flex flex-col text-left gap-4">
             <div className="flex items-center gap-2 text-slate-400">
               <Clock className="h-4 w-4 shrink-0" />
@@ -346,63 +352,57 @@ export default function MyComplaints() {
               </div>
               <p className="text-[11px] font-semibold text-slate-400 mt-1">Average Resolution Time</p>
             </div>
-            
           </div>
 
-          {/* Timeline Update component */}
+          {/* Timeline Update */}
           <div className="bg-white rounded-3xl border border-slate-200/60 p-6 flex flex-col text-left">
             <div className="flex items-center gap-2 text-slate-400 pb-5 border-b border-slate-100">
               <Calendar className="h-4 w-4 shrink-0" />
               <span className="text-[10px] font-bold uppercase tracking-wider">Timeline Update</span>
             </div>
 
-            {/* Custom Interactive Vertical Connection Bar */}
+            {/* Vertical timeline */}
             <div className="relative py-4 pl-4 mt-1">
               <div className="absolute top-6 bottom-6 left-[19px] w-[1px] bg-slate-200" />
 
               <div className="flex flex-col gap-6">
                 {timelineUpdates.length > 0 ? timelineUpdates.map((item) => (
                   <div key={item.id} className="relative pl-6">
-                    {/* Circle marker milestone connector */}
                     <div className="absolute left-[1.5px] top-1.5 h-2 w-2 rounded-full border border-slate-350 bg-white ring-4 ring-slate-100" />
-                    
-                    <span className="text-[10px] text-slate-400 font-bold block mb-1">
-                      {item.time}
-                    </span>
-                    <strong className="text-xs font-extrabold text-slate-800 leading-tight block">
-                      {item.heading}
-                    </strong>
-                    <span className="text-[11px] text-slate-500 font-semibold leading-relaxed block mt-1">
-                      {item.subtext}
-                    </span>
+                    <span className="text-[10px] text-slate-400 font-bold block mb-1">{item.time}</span>
+                    <strong className="text-xs font-extrabold text-slate-800 leading-tight block">{item.heading}</strong>
+                    <span className="text-[11px] text-slate-500 font-semibold leading-relaxed block mt-1">{item.subtext}</span>
                   </div>
                 )) : (
                   <div className="relative pl-6">
                     <div className="absolute left-[1.5px] top-1.5 h-2 w-2 rounded-full border border-slate-300 bg-white ring-4 ring-slate-100" />
-                    <strong className="text-xs font-extrabold text-slate-800 leading-tight block">
-                      No timeline updates yet
-                    </strong>
-                    <span className="text-[11px] text-slate-500 font-semibold leading-relaxed block mt-1">
-                      Updates will appear when your complaints change status.
-                    </span>
+                    <strong className="text-xs font-extrabold text-slate-800 leading-tight block">No timeline updates yet</strong>
+                    <span className="text-[11px] text-slate-500 font-semibold leading-relaxed block mt-1">Updates will appear when your complaints change status.</span>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Inactive secondary action logs button */}
-            <button className="w-full text-center hover:bg-slate-50 text-slate-600 text-xs font-bold border-t border-slate-150 pt-4 cursor-pointer hover:text-slate-800 transition-colors">
-              View Full History
-            </button>
+            {/* View Full History — now functional */}
+            {sortedTimeline.length > 3 && (
+              <button
+                onClick={() => setShowAllHistory((prev) => !prev)}
+                className="w-full text-center hover:bg-slate-50 text-slate-600 text-xs font-bold border-t border-slate-150 pt-4 cursor-pointer hover:text-slate-800 transition-colors"
+              >
+                {showAllHistory
+                  ? `Show Less`
+                  : `View Full History (${sortedTimeline.length} events)`}
+              </button>
+            )}
           </div>
 
-          {/* Fact notification CTA card */}
+          {/* Fact CTA card */}
           <div className="bg-[#043d2e] rounded-3xl p-6 text-white text-left shadow-xs flex flex-col gap-3">
             <div className="rounded-xl h-9 w-9 bg-emerald-900/50 flex items-center justify-center text-emerald-300">
-              <BookOpen className="h-4.5 w-4.5" />
+              <BookOpen className="h-4 w-4" />
             </div>
             <div>
-              <h4 className="text-xs font-black tracking-wide uppercase text-emerald-350 mb-1">Did you know?</h4>
+              <h4 className="text-xs font-black tracking-wide uppercase text-emerald-300 mb-1">Did you know?</h4>
               <p className="text-[11px] text-emerald-100/90 leading-relaxed font-semibold">
                 Safety-related grievances are highlighted by priority when the backend data marks them as High.
               </p>
@@ -434,19 +434,16 @@ export function ComplaintTable({ complaints, showFeedback }) {
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
-      {/* Desktop Headers */}
       <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-4 bg-slate-50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
         <div className="col-span-5">Grievance / Issue</div>
         <div className="col-span-2">Category</div>
-        <div className="col-span-1.5">Priority</div>
+        <div className="col-span-2">Priority</div>
         <div className="col-span-2">Current Status</div>
-        <div className="col-span-1.5 text-right">Actions</div>
+        <div className="col-span-1 text-right">Actions</div>
       </div>
 
-      {/* Rows */}
       <div className="divide-y divide-slate-100">
         {complaints.map((c) => {
-          // Status styling
           let statusBg = "bg-slate-50 text-slate-600 border-slate-200/60";
           let statusBullet = "bg-slate-400";
           if (c.status === "Resolved") {
@@ -460,7 +457,6 @@ export function ComplaintTable({ complaints, showFeedback }) {
             statusBullet = "bg-rose-500";
           }
 
-          // Priority styling
           let priorityColor = "text-slate-500";
           if (c.priority === "High") priorityColor = "text-red-600 font-bold";
           else if (c.priority === "Medium") priorityColor = "text-amber-600 font-bold";
@@ -470,38 +466,28 @@ export function ComplaintTable({ complaints, showFeedback }) {
               key={c.id} 
               className="p-6 flex flex-col md:grid md:grid-cols-12 md:gap-4 items-start md:items-center hover:bg-slate-50/40 transition-colors text-left"
             >
-              {/* Left Column: Complaint General Context */}
               <div className="col-span-5 flex gap-3.5 w-full min-w-0 pr-2">
                 <div className="h-9 w-9 bg-emerald-50 text-emerald-800 rounded-xl flex items-center justify-center shrink-0 border border-emerald-100/40">
                   <span className="text-xs font-bold">#{c.id}</span>
                 </div>
                 <div className="min-w-0 text-left">
-                  <p className="text-xs font-extrabold text-slate-800 truncate leading-tight">
-                    {c.title}
-                  </p>
+                  <p className="text-xs font-extrabold text-slate-800 truncate leading-tight">{c.title}</p>
                   <p className="text-[11px] text-slate-400 font-semibold truncate mt-1">
                     Assigned to: <span className="text-slate-600 font-bold">{c.assignee?.name || "Unassigned"}</span>
                   </p>
                 </div>
               </div>
 
-              {/* Category Column */}
               <div className="col-span-2 mt-2.5 md:mt-0 text-left">
                 <span className="md:hidden text-[9px] text-slate-400 font-bold uppercase block mb-0.5">Category</span>
-                <span className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-150 rounded-lg px-2.5 py-1">
-                  {c.category}
-                </span>
+                <span className="text-xs font-bold text-slate-600 bg-slate-50 border border-slate-150 rounded-lg px-2.5 py-1">{c.category}</span>
               </div>
 
-              {/* Priority Column */}
-              <div className="col-span-1.5 mt-2.5 md:mt-0 text-left">
+              <div className="col-span-2 mt-2.5 md:mt-0 text-left">
                 <span className="md:hidden text-[9px] text-slate-400 font-bold uppercase block mb-0.5">Priority</span>
-                <span className={`text-xs ${priorityColor}`}>
-                  {c.priority}
-                </span>
+                <span className={`text-xs ${priorityColor}`}>{c.priority}</span>
               </div>
 
-              {/* Status Badge Column */}
               <div className="col-span-2 mt-3 md:mt-0 text-left">
                 <span className="md:hidden text-[9px] text-slate-400 font-bold uppercase block mb-0.5">Status</span>
                 <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${statusBg}`}>
@@ -510,8 +496,7 @@ export function ComplaintTable({ complaints, showFeedback }) {
                 </span>
               </div>
 
-              {/* Action Links Column */}
-              <div className="col-span-1.5 mt-4.5 md:mt-0 flex gap-2 w-full md:justify-end">
+              <div className="col-span-1 mt-4 md:mt-0 flex gap-2 w-full md:justify-end">
                 <Link 
                   to={`/complaints/${c.id}`}
                   className="flex items-center gap-1 text-slate-600 hover:text-emerald-800 text-xs font-bold bg-slate-50 hover:bg-emerald-50 border border-slate-200/60 rounded-xl px-3.5 py-2 transition-all cursor-pointer grow md:grow-0 justify-center"
@@ -536,5 +521,3 @@ export function ComplaintTable({ complaints, showFeedback }) {
     </div>
   );
 }
-
-

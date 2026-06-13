@@ -3,54 +3,74 @@ import { Link } from "react-router-dom";
 import api from "../../api/client";
 import { 
   Search, 
-  Bell, 
-  Settings, 
   X, 
   ChevronRight, 
   ChevronLeft, 
-  Plus, 
   Download, 
   Check, 
   AlertCircle, 
   Calendar, 
-  Paperclip, 
-  HelpCircle, 
-  Send, 
   FileText, 
   CheckCircle2, 
-  RefreshCw, 
   SlidersHorizontal,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Paperclip
 } from "lucide-react";
 
 export default function ComplaintManagement() {
   const [complaints, setComplaints] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [staff, setStaff] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
 
-  // Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [priorityFilter, setPriorityFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState("");
 
-  // Control drawer fields state
   const [drawerStatus, setDrawerStatus] = useState("Submitted");
   const [drawerStaffId, setDrawerStaffId] = useState("");
 
-  // Interface feedback state
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [exportNotification, setExportNotification] = useState("");
 
-  const staff = useMemo(() => users.filter((u) => u.role === "staff"), [users]);
+  // Helper date-format utilities
+  function formatDateShort(dateString) {
+    if (!dateString) return "No date";
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return "No date";
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return "No date";
+    }
+  }
+
+  function formatFullDate(dateString) {
+    if (!dateString) return "—";
+    try {
+      const d = new Date(dateString);
+      if (isNaN(d.getTime())) return "—";
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + ", " + d.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit"
+      });
+    } catch {
+      return "—";
+    }
+  }
 
   function load() {
+    // Fetch complaints and users in parallel.
+    // The backend /users endpoint lists all users; we filter to staff client-side.
+    // If your backend exposes a dedicated /users/staff endpoint, use that instead.
     Promise.all([api.get("/complaints"), api.get("/users")])
       .then(([complaintsRes, usersRes]) => {
         setComplaints(complaintsRes.data || []);
-        setUsers(usersRes.data || []);
+        const allUsers = usersRes.data || [];
+        // Support both { role: "staff" } and { role: "Staff" }
+        setStaff(allUsers.filter((u) => String(u.role || "").toLowerCase() === "staff"));
         if (complaintsRes.data && complaintsRes.data.length > 0 && !selectedId) {
           setSelectedId(complaintsRes.data[0].id);
         }
@@ -58,7 +78,7 @@ export default function ComplaintManagement() {
       .catch((err) => {
         console.error("Failed to load complaint management", err);
         setComplaints([]);
-        setUsers([]);
+        setStaff([]);
         setErrorMessage(err.response?.data?.detail || "Could not load complaint management data.");
       });
   }
@@ -67,24 +87,21 @@ export default function ComplaintManagement() {
     load();
   }, []);
 
-  // Update selected complaint's status inside the drawer
   const activeComplaint = useMemo(() => {
     if (!selectedId) return null;
     return complaints.find(c => c.id === selectedId) || null;
   }, [complaints, selectedId]);
 
-  // Sync drawer dropdown fields whenever activeComplaint changes
   useEffect(() => {
     if (activeComplaint) {
       setDrawerStatus(activeComplaint.status || "Submitted");
-      const matchedStaff = staff.find(s => s.name === activeComplaint.assignee?.name);
-      setDrawerStaffId(matchedStaff ? String(matchedStaff.id) : "");
+      // Match staff by id (assigned_to) rather than name to avoid false mismatches
+      setDrawerStaffId(activeComplaint.assigned_to ? String(activeComplaint.assigned_to) : "");
       setSuccessMessage("");
       setErrorMessage("");
     }
-  }, [activeComplaint, staff]);
+  }, [activeComplaint]);
 
-  // Combined Status & Assign Patch Action on the update button
   async function handleUpdateGrievanceState() {
     if (!activeComplaint) return;
     setSuccessMessage("");
@@ -95,7 +112,7 @@ export default function ComplaintManagement() {
           staff_id: Number(drawerStaffId) 
         });
       } else if (activeComplaint.assigned_to) {
-        setErrorMessage("Backend does not support unassigning a complaint.");
+        setErrorMessage("Unassigning a staff member is not supported. Select a different staff member to reassign.");
         return;
       }
 
@@ -111,20 +128,17 @@ export default function ComplaintManagement() {
     }
   }
 
-  // Individual instant priority modifier
   async function handlePriorityChange(cid, val) {
     try {
       await api.patch(`/complaints/${cid}`, { priority: val });
       load();
     } catch (err) {
-      alert("Error updating priority parameters");
+      setErrorMessage("Error updating priority");
     }
   }
 
-  // Filter complaints based on Search, Category, Status, Priority, and Date Range variables
   const filteredComplaints = useMemo(() => {
     return complaints.filter((c) => {
-      // 1. Search Query String
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const cidStr = `#grv-${c.id}`;
@@ -132,28 +146,13 @@ export default function ComplaintManagement() {
         const matchCreator = (c.creator?.name || "").toLowerCase().includes(query);
         const matchCategory = (c.category || "").toLowerCase().includes(query);
         const matchId = String(c.id).includes(query) || cidStr.includes(query);
-
-        if (!matchTitle && !matchCreator && !matchCategory && !matchId) {
-          return false;
-        }
+        if (!matchTitle && !matchCreator && !matchCategory && !matchId) return false;
       }
 
-      // 2. Category
-      if (categoryFilter !== "All") {
-        if (c.category !== categoryFilter) return false;
-      }
+      if (categoryFilter !== "All" && c.category !== categoryFilter) return false;
+      if (statusFilter !== "All" && c.status !== statusFilter) return false;
+      if (priorityFilter !== "All" && c.priority !== priorityFilter) return false;
 
-      // 3. Status
-      if (statusFilter !== "All") {
-        if (c.status !== statusFilter) return false;
-      }
-
-      // 4. Priority
-      if (priorityFilter !== "All") {
-        if (c.priority !== priorityFilter) return false;
-      }
-
-      // 5. Date Filter (exact match or simple string check)
       if (dateFilter) {
         const formDate = formatDateShort(c.created_at).toLowerCase();
         const inputDate = new Date(dateFilter).toLocaleDateString("en-US", { month: "short", day: "numeric" }).toLowerCase();
@@ -164,7 +163,6 @@ export default function ComplaintManagement() {
     });
   }, [complaints, searchQuery, categoryFilter, statusFilter, priorityFilter, dateFilter]);
 
-  // Export Filtered items CSV export
   const handleExportCSV = () => {
     const headers = "CaseID,Student,Category,Priority,Status,Assignee,Date\n";
     const rows = filteredComplaints.map(c => 
@@ -182,73 +180,35 @@ export default function ComplaintManagement() {
     setTimeout(() => setExportNotification(""), 4000);
   };
 
-  // Helper date-format utilities
-  function formatDateShort(dateString) {
-    if (!dateString) return "No date";
-    try {
-      const d = new Date(dateString);
-      if (isNaN(d.getTime())) return "No date";
-      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    } catch {
-      return "No date";
-    }
-  }
-
-  function formatFullDate(dateString) {
-    if (!dateString) return "No date â€¢ 10:45 AM";
-    try {
-      const d = new Date(dateString);
-      if (isNaN(d.getTime())) return "No date â€¢ 10:45 AM";
-      return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + ", " + d.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit"
-      });
-    } catch {
-      return "No date â€¢ 10:45 AM";
-    }
-  }
-
-  // Populate timeline updates from active complaint fields only.
   const activeTimeline = useMemo(() => {
     if (!activeComplaint) return [];
     return [
       {
         title: activeComplaint.status || "Status Tracked",
         time: formatFullDate(activeComplaint.updated_at),
-        desc: `No further administrative notes logged. Current status set to ${activeComplaint.status || "Submitted"}.`,
+        desc: activeComplaint.resolution_notes || `Current status: ${activeComplaint.status || "Submitted"}.`,
         active: true
       },
       {
         title: "Grievance Created",
         time: formatFullDate(activeComplaint.created_at),
-        desc: `New institutional request submitted by ${activeComplaint.creator?.name || "Student User"}.`,
+        desc: `Submitted by ${activeComplaint.creator?.name || "Student User"}.`,
         active: false
       }
     ];
-
   }, [activeComplaint]);
 
-  // Category List options helper
   const uniqueCategories = [
-    "All",
-    "Academic",
-    "Faculty",
-    "Student",
-    "Infrastructure",
-    "Transport",
-    "Administration",
-    "Other"
+    "All", "Academic", "Faculty", "Student", "Infrastructure", "Transport", "Administration", "Other"
   ];
 
   return (
     <div className="space-y-6 text-left relative">
       
-      {/* Top Header Section */}
+      {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
         <div>
-          <h2 className="text-[#0c3127] text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2">
-            Grievance Management
-          </h2>
+          <h2 className="text-[#0c3127] text-2xl sm:text-3xl font-black tracking-tight">Grievance Management</h2>
           <p className="text-xs sm:text-sm text-slate-500 font-semibold mt-1">
             Review and manage student submissions across all departments.
           </p>
@@ -260,22 +220,29 @@ export default function ComplaintManagement() {
         </div>
       </div>
 
-      {/* Global Interactive Header Search bar */}
+      {/* Global error banner */}
+      {errorMessage && (
+        <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 flex gap-3 text-rose-800 text-xs font-semibold">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <p>{errorMessage}</p>
+        </div>
+      )}
+
+      {/* Search */}
       <div className="relative">
-        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-slate-400" />
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
         <input 
           type="text" 
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search Case ID, student name, description elements..."
+          placeholder="Search Case ID, student name, description..."
           className="w-full bg-white border border-slate-200/90 rounded-2xl pl-11 pr-4 py-3.5 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-700 shadow-2xs"
         />
       </div>
 
-      {/* Split layout structure: table left and drawer on right */}
+      {/* Split layout */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         
-        {/* Main interactive panel: Filters + Table (xl:col-span-8 or 12 deSubmitted on selected state) */}
         <div className={selectedId ? "xl:col-span-8 space-y-6" : "xl:col-span-12 space-y-6"}>
           
           {/* Filters card */}
@@ -300,8 +267,6 @@ export default function ComplaintManagement() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              
-              {/* Category dropdown config */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Category</label>
                 <select 
@@ -313,7 +278,6 @@ export default function ComplaintManagement() {
                 </select>
               </div>
 
-              {/* Status dropdown config */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Status</label>
                 <select 
@@ -328,7 +292,6 @@ export default function ComplaintManagement() {
                 </select>
               </div>
 
-              {/* Priority dropdown Selector config */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Priority</label>
                 <select 
@@ -343,7 +306,6 @@ export default function ComplaintManagement() {
                 </select>
               </div>
 
-              {/* Date parameters input */}
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Date Range</label>
                 <div className="relative">
@@ -356,10 +318,8 @@ export default function ComplaintManagement() {
                   />
                 </div>
               </div>
-
             </div>
 
-            {/* Downloader Operations Row */}
             <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-100 flex-wrap">
               {exportNotification ? (
                 <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
@@ -382,7 +342,7 @@ export default function ComplaintManagement() {
             </div>
           </div>
 
-          {/* Table list component */}
+          {/* Table */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -398,10 +358,15 @@ export default function ComplaintManagement() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredComplaints.map((c) => {
+                  {filteredComplaints.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-5 py-12 text-center text-xs text-slate-400 font-semibold">
+                        No complaints match your current filters.
+                      </td>
+                    </tr>
+                  ) : filteredComplaints.map((c) => {
                     const isSelected = selectedId === c.id;
 
-                    // Priority styling config
                     let priorityBadge = "bg-emerald-50 text-emerald-800 border-emerald-100";
                     if (c.priority === "High") {
                       priorityBadge = "bg-rose-50 text-rose-800 border-rose-150 font-black uppercase";
@@ -409,16 +374,16 @@ export default function ComplaintManagement() {
                       priorityBadge = "bg-amber-50 text-amber-800 border-amber-150 font-black uppercase";
                     }
 
-                    // Status style config
-                    let statusBadge = "bg-slate-100 text-slate-700 border-slate-205";
+                    // Fixed: removed duplicate "In Progress" case; each status has one style
+                    let statusBadge = "bg-slate-100 text-slate-700 border-slate-200";
                     if (c.status === "In Progress") {
                       statusBadge = "bg-red-50 text-red-800 border-red-150 font-black";
                     } else if (c.status === "Under Review") {
-                      statusBadge = "bg-indigo-50 text-indigo-805 border-indigo-150 font-black";
+                      statusBadge = "bg-indigo-50 text-indigo-800 border-indigo-150 font-black";
                     } else if (c.status === "Resolved") {
                       statusBadge = "bg-[#064e3b] text-emerald-100 border-transparent font-black";
-                    } else if (c.status === "In Progress") {
-                      statusBadge = "bg-amber-50 text-amber-800 border-amber-150 font-black";
+                    } else if (c.status === "Rejected") {
+                      statusBadge = "bg-slate-200 text-slate-700 border-slate-300 font-black";
                     }
 
                     return (
@@ -461,9 +426,8 @@ export default function ComplaintManagement() {
               </table>
             </div>
 
-            {/* Showing footer items pagination bar */}
             <div className="bg-slate-50 border-t border-slate-200 px-5 py-3.5 flex items-center justify-between text-xs font-semibold text-slate-500">
-              <span>Showing 1-10 of {filteredComplaints.length} results</span>
+              <span>Showing {Math.min(filteredComplaints.length, 10)} of {filteredComplaints.length} results</span>
               <div className="flex items-center gap-1.5">
                 <button className="p-1 rounded-md border border-slate-200 bg-white text-slate-400 hover:text-slate-700 hover:bg-slate-50 cursor-pointer">
                   <ChevronLeft className="h-4 w-4" />
@@ -477,11 +441,10 @@ export default function ComplaintManagement() {
 
         </div>
 
-        {/* Right drawer detailed panel elements */}
+        {/* Right drawer */}
         {selectedId && activeComplaint && (
           <div className="xl:col-span-4 bg-white rounded-3xl border border-slate-200 shadow-lg flex flex-col overflow-hidden sticky top-24">
             
-            {/* Dark green Teaser Header Block */}
             <div className="bg-[#0c3127] text-white p-5 flex items-center justify-between relative">
               <div className="space-y-0.5 text-left">
                 <span className="text-[10px] text-emerald-300 font-black uppercase tracking-wider block">Case #GRV-{activeComplaint.id}</span>
@@ -498,10 +461,9 @@ export default function ComplaintManagement() {
               </button>
             </div>
 
-            {/* Drawer Body elements */}
             <div className="p-5 overflow-y-auto space-y-6 text-left max-h-[75vh]">
               
-              {/* Dropdowns State Modifiers Fields */}
+              {/* Status + Assign dropdowns */}
               <div className="grid grid-cols-2 gap-3.5">
                 <div className="flex flex-col gap-1">
                   <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Current Status</label>
@@ -531,7 +493,7 @@ export default function ComplaintManagement() {
                 </div>
               </div>
 
-              {/* Success action button */}
+              {/* Action feedback */}
               <div className="space-y-2.5">
                 {successMessage && (
                   <p className="text-[11px] font-bold text-emerald-600 flex items-center justify-center gap-1.5 bg-emerald-50 border border-emerald-100 p-2 rounded-lg">
@@ -554,7 +516,7 @@ export default function ComplaintManagement() {
                 </button>
               </div>
 
-              {/* Title parameter details section */}
+              {/* Complaint details */}
               <div className="pt-4 border-t border-slate-100 space-y-4">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Complaint Details</span>
                 
@@ -563,47 +525,37 @@ export default function ComplaintManagement() {
                     <span className="text-slate-400 font-semibold block">Category:</span>
                     <strong className="text-slate-800 font-extrabold block">{activeComplaint.category}</strong>
                   </div>
-                  
                   <div className="space-y-0.5">
                     <span className="text-slate-400 font-semibold block">Submission Date:</span>
                     <strong className="text-slate-800 font-extrabold block">{formatFullDate(activeComplaint.created_at)}</strong>
                   </div>
-
                   <div className="space-y-0.5 col-span-2">
                     <span className="text-slate-400 font-semibold block">Priority Rank:</span>
                     <strong className="text-rose-600 font-black tracking-wide block uppercase">{activeComplaint.priority}</strong>
                   </div>
                 </div>
 
-                {/* Complaint Title parameter */}
                 <div className="space-y-1">
                   <span className="text-[10.5px] font-extrabold text-slate-700 block">Subject Title:</span>
-                  <p className="text-xs text-slate-850 font-bold bg-slate-50 border border-slate-150 p-2.5 rounded-xl">{activeComplaint.title}</p>
+                  <p className="text-xs text-slate-800 font-bold bg-slate-50 border border-slate-150 p-2.5 rounded-xl">{activeComplaint.title}</p>
                 </div>
 
-                {/* Styled Quote Box Description */}
                 <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl text-xs text-slate-600 font-semibold leading-relaxed italic whitespace-pre-wrap">
                   &ldquo;{activeComplaint.description}&rdquo;
                 </div>
 
-                {/* Attachment Link Block Card style */}
-                <div className="bg-slate-50 border border-slate-150 rounded-xl p-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <FileText className="h-4 w-4 text-emerald-800 shrink-0" />
-                    <span className="text-xs text-slate-700 font-extrabold underline truncate hover:text-[#064e3b] cursor-pointer" onClick={() => alert("Reviewing attached marking schemes files logs...")}>
-                      Attachment data unavailable
-                    </span>
-                  </div>
-                  <Download className="h-3.5 w-3.5 text-slate-400 hover:text-emerald-800 cursor-pointer" onClick={() => alert("Downloading raw file archives elements...")} />
+                {/* Attachment placeholder — no alerts, clearly communicates status */}
+                <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-3 flex items-center gap-2.5">
+                  <Paperclip className="h-4 w-4 text-slate-300 shrink-0" />
+                  <span className="text-xs text-slate-400 font-semibold italic">Attachment support is planned for a future release.</span>
                 </div>
               </div>
 
-              {/* ACTION TIMELINE vertical list section selection */}
+              {/* Action timeline */}
               <div className="pt-4 border-t border-slate-100 space-y-4">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Action Timeline</span>
 
                 <div className="relative pl-3.5 font-semibold space-y-5">
-                  {/* Vertical line connector */}
                   <div className="absolute top-2.5 bottom-2.5 left-[19.5px] w-[1px] bg-slate-200" />
 
                   {activeTimeline.map((item, idx) => (
@@ -621,19 +573,20 @@ export default function ComplaintManagement() {
                 </div>
               </div>
 
-              {/* Action buttons footer */}
+              {/* Footer actions */}
               <div className="pt-4 border-t border-slate-100 grid grid-cols-2 gap-3">
-                <button 
-                  onClick={() => alert("Reviewing Internal note archives...")}
-                  className="py-2.5 border border-slate-250 hover:bg-slate-50 text-slate-700 text-xs font-bold text-center rounded-xl cursor-pointer transition-colors"
+                <Link 
+                  to={`/complaints/${activeComplaint.id}`}
+                  className="py-2.5 border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold text-center rounded-xl cursor-pointer transition-colors flex items-center justify-center gap-1"
                 >
-                  Internal Note
-                </button>
+                  <FileText className="h-3.5 w-3.5" />
+                  View Record
+                </Link>
                 <Link 
                   to={`/complaints/${activeComplaint.id}`}
                   className="py-2.5 bg-[#0c3127] hover:bg-[#0f4033] text-white text-xs font-black text-center rounded-xl tracking-wide uppercase cursor-pointer transition-colors flex items-center justify-center"
                 >
-                  Message Student
+                  Open Case
                 </Link>
               </div>
 
@@ -647,5 +600,3 @@ export default function ComplaintManagement() {
     </div>
   );
 }
-
-

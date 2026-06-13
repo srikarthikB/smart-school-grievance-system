@@ -94,7 +94,7 @@ export default function ComplaintDetails() {
       if (isNaN(d.getTime())) return dfl;
       return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) + " â€¢ " + d.toLocaleTimeString("en-US", {
         hour: "2-digit",
-        minute: " 2-digit",
+        minute: "2-digit",
         hour12: true
       });
     } catch {
@@ -497,4 +497,3 @@ export default function ComplaintDetails() {
     </div>
   );
 }
-
