@@ -24,7 +24,7 @@ import {
   Smile
 } from "lucide-react";
 
-const blank = { name: "", email: "", password: "password123", role: "staff", department: "Academic" };
+const blank = { name: "", email: "", password: "", role: "staff", department: "Academic" };
 const blankStaff = { name: "", email: "", password: "", role: "staff", department: "Academic" };
 
 export default function UserManagement() {
@@ -32,6 +32,7 @@ export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(blank);
   const [message, setMessage] = useState("");
+  const [staffMessage, setStaffMessage] = useState("");
   
   // Interactive Modal controls for Create Staff Account
   const [showStaffModal, setShowStaffModal] = useState(false);
@@ -76,18 +77,18 @@ export default function UserManagement() {
       setTimeout(() => setSuccessMsg(""), 4000);
       load();
     } catch (err) {
-      setMessage(err.response?.data?.detail || "Could not create user info");
+      setMessage(err.response?.data?.detail || "Could not create user.");
     }
   }
 
   async function createStaff(e) {
     e.preventDefault();
-    setMessage("");
+    setStaffMessage("");
     setSuccessMsg("");
     
     // Strict institutional role check: Students must not be able to create staff accounts.
     if (currentAdmin?.role !== "admin") {
-      setMessage("Access denied: You are not authorized to create staff accounts.");
+      setStaffMessage("Access denied: You are not authorized to create staff accounts.");
       return;
     }
 
@@ -105,7 +106,7 @@ export default function UserManagement() {
       setTimeout(() => setSuccessMsg(""), 4000);
       load();
     } catch (err) {
-      setMessage(err.response?.data?.detail || "Could not create staff account.");
+      setStaffMessage(err.response?.data?.detail || "Could not create staff account.");
     }
   }
 
@@ -116,7 +117,7 @@ export default function UserManagement() {
       setTimeout(() => setSuccessMsg(""), 2000);
       load();
     } catch (err) {
-      alert("Error updating database records for this role");
+      setMessage(err.response?.data?.detail || "Error updating role.");
     }
   }
 
@@ -128,7 +129,7 @@ export default function UserManagement() {
       setTimeout(() => setSuccessMsg(""), 2000);
       load();
     } catch (err) {
-      alert("Error updating department affiliation state");
+      setMessage(err.response?.data?.detail || "Error updating department.");
     }
   }
 
@@ -140,7 +141,7 @@ export default function UserManagement() {
         setTimeout(() => setSuccessMsg(""), 4000);
         load();
       } catch (err) {
-        alert("Failed to delete user directory catalog");
+        setMessage(err.response?.data?.detail || "Failed to delete user.");
       }
     }
   }
@@ -148,6 +149,7 @@ export default function UserManagement() {
   async function handleEditSubmit(e) {
     e.preventDefault();
     if (!editingUser) return;
+    setMessage("");
     try {
       await api.patch(`/users/${editingUser.id}`, {
         name: editingUser.name,
@@ -160,7 +162,7 @@ export default function UserManagement() {
       setTimeout(() => setSuccessMsg(""), 4000);
       load();
     } catch (err) {
-      alert("Error performing user schema modifications");
+      setMessage(err.response?.data?.detail || "Error saving user changes.");
     }
   }
 
@@ -308,7 +310,7 @@ export default function UserManagement() {
       {/* Quick interactive action triggers button row */}
       <div className="flex flex-wrap items-center gap-3">
         <button 
-          onClick={() => setShowAddModal(true)}
+          onClick={() => { setForm(blank); setMessage(""); setShowAddModal(true); }}
           className="bg-[#0c3127] hover:bg-[#0f4033] text-white py-3 px-5 rounded-2xl text-xs font-black tracking-wide inline-flex items-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98"
         >
           <Plus className="h-4.5 w-4.5" />
@@ -319,6 +321,7 @@ export default function UserManagement() {
           onClick={() => {
             setForm(blank);
             setStaffForm(blankStaff);
+            setStaffMessage("");
             setShowStaffModal(true);
             setMessage("");
           }}
@@ -542,7 +545,7 @@ export default function UserManagement() {
                           
                           {/* Main Edit pen icon */}
                           <button 
-                            onClick={() => setEditingUser(u)}
+                            onClick={() => { setMessage(""); setEditingUser(u); }}
                             className="p-1.5 border border-slate-205 text-slate-400 hover:text-[#0c3127] hover:bg-emerald-50 rounded-xl transition-all cursor-pointer"
                             title="Modify User Schema"
                           >
@@ -728,7 +731,7 @@ export default function UserManagement() {
               <button 
                 onClick={() => {
                   setShowStaffModal(false);
-                  setMessage("");
+                  setStaffMessage("");
                 }}
                 className="p-1 hover:bg-white/10 rounded-xl transition-all cursor-pointer"
               >
@@ -738,10 +741,10 @@ export default function UserManagement() {
 
             {/* Modal Form inputs content */}
             <form onSubmit={createStaff} className="p-6 space-y-4 text-left">
-              {message && (
+              {staffMessage && (
                 <div className="bg-rose-50 border border-rose-100 p-3.5 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-2">
                   <AlertCircle className="h-4 w-4 shrink-0" />
-                  <span>{message}</span>
+                  <span>{staffMessage}</span>
                 </div>
               )}
 
@@ -799,7 +802,7 @@ export default function UserManagement() {
                   type="button"
                   onClick={() => {
                     setShowStaffModal(false);
-                    setMessage("");
+                    setStaffMessage("");
                   }}
                   className="px-4 py-2.5 border border-slate-200 bg-white hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 cursor-pointer"
                 >
@@ -837,6 +840,12 @@ export default function UserManagement() {
             </div>
 
             <form onSubmit={handleEditSubmit} className="p-6 space-y-4 text-left">
+              {message && (
+                <div className="bg-rose-50 border border-rose-100 p-3.5 rounded-lg text-xs font-bold text-rose-700 flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{message}</span>
+                </div>
+              )}
               
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Full Name</label>
@@ -915,4 +924,3 @@ export default function UserManagement() {
     </div>
   );
 }
-

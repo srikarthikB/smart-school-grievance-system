@@ -7,7 +7,7 @@ from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.enums import UserRole
 from app.models.user import User
-from app.schemas.user import UserCreate, UserRead, UserUpdate
+from app.schemas.user import AdminUserUpdate, UserCreate, UserRead
 
 router = APIRouter()
 
@@ -44,19 +44,38 @@ def create_user(
 @router.patch("/{user_id}", response_model=UserRead)
 def update_user(
     user_id: int,
-    payload: UserUpdate,
+    payload: AdminUserUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_roles(UserRole.admin)),
+    current_user: User = Depends(require_roles(UserRole.admin)),
 ):
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
     data = payload.model_dump(exclude_unset=True)
+
+    # Check email uniqueness if email is being changed
+    new_email = data.get("email")
+    if new_email and new_email.lower() != user.email:
+        if db.scalar(select(User).where(User.email == new_email.lower())):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        data["email"] = new_email.lower()
+
     password = data.pop("password", None)
+    role = data.get("role")
+
     for key, value in data.items():
         setattr(user, key, value)
+
     if password:
         user.password_hash = hash_password(password)
+        # Invalidate all previously issued JWTs for this user
+        user.token_version = (user.token_version or 0) + 1
+
+    if role and role != user.role:
+        # Role change also invalidates existing tokens
+        user.token_version = (user.token_version or 0) + 1
+
     db.commit()
     db.refresh(user)
     return user

@@ -26,9 +26,10 @@ class UserUpdate(BaseModel):
 
 
 class AdminUserUpdate(BaseModel):
-    """Fields an admin may update on any user, including role."""
+    """Fields an admin may update on any user, including role and email."""
 
     name: str | None = Field(default=None, min_length=2, max_length=120)
+    email: EmailStr | None = None
     role: UserRole | None = None
     department: Department | None = None
     password: str | None = Field(default=None, min_length=6)
