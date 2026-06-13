@@ -17,6 +17,17 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
+    """Fields any authenticated user may update about themselves.
+    Role is intentionally absent — use AdminUserUpdate via an admin-only endpoint."""
+
+    name: str | None = Field(default=None, min_length=2, max_length=120)
+    department: Department | None = None
+    password: str | None = Field(default=None, min_length=6)
+
+
+class AdminUserUpdate(BaseModel):
+    """Fields an admin may update on any user, including role."""
+
     name: str | None = Field(default=None, min_length=2, max_length=120)
     role: UserRole | None = None
     department: Department | None = None

@@ -13,6 +13,17 @@ from app.schemas.user import UserCreate, UserRead
 router = APIRouter()
 
 
+def _issue_token(user: User) -> str:
+    """Create a JWT for user, embedding token_version so the server can
+    invalidate it later by incrementing User.token_version (BUG-04).
+    The role claim is informational only — authorization always re-derives
+    the role from the DB row in get_current_user (BUG-10)."""
+    return create_access_token(
+        str(user.id),
+        {"role": user.role.value, "tv": user.token_version},
+    )
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     if payload.role != UserRole.student:
@@ -30,8 +41,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    token = create_access_token(str(user.id), {"role": user.role.value})
-    return TokenResponse(access_token=token, user=user)
+    return TokenResponse(access_token=_issue_token(user), user=user)
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -39,8 +49,14 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == payload.email.lower()))
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
-    token = create_access_token(str(user.id), {"role": user.role.value})
-    return TokenResponse(access_token=token, user=user)
+    return TokenResponse(access_token=_issue_token(user), user=user)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Invalidate all existing JWTs for this user by bumping token_version (BUG-04)."""
+    current_user.token_version += 1
+    db.commit()
 
 
 @router.get("/me", response_model=UserRead)

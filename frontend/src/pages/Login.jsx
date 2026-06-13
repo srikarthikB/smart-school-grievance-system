@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { 
   Scale, 
@@ -16,8 +16,13 @@ import {
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  // BUG-13: Read the location state that ProtectedRoute injects when it
+  // redirects an unauthenticated user to /login. After a successful login
+  // we send them back to where they were trying to go instead of always
+  // landing on the generic role home page.
+  const location = useLocation();
+  const from = location.state?.from?.pathname || "/";
   
-  // Empty default inputs to reflect genuine institutional credentials format
   const [form, setForm] = useState({ 
     email: "", 
     password: "" 
@@ -33,9 +38,10 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const userData = await login(form.email, form.password);
-      const userRole = userData?.role || "student";
-      navigate(`/${userRole}`);
+      await login(form.email, form.password);
+      // BUG-13: Navigate back to the intended page (or "/" which RoleHome
+      // will redirect correctly based on the user's role).
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err.response?.data?.detail || "Invalid institutional credentials. Please try again.");
     } finally {

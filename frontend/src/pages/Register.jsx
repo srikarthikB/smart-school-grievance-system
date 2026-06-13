@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import { 
   Scale, 
@@ -18,16 +18,24 @@ import {
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
+  // BUG-13: Read intended destination in case the user was redirected here
+  // from a protected route (unlikely for registration, but keeps behaviour
+  // consistent with Login and avoids landing on "/" then bouncing again).
+  const location = useLocation();
+  const from = location.state?.from?.pathname || "/";
 
-  // Keep existing form state structure and add confirmation / student ID visuals natively
   const [form, setForm] = useState({ 
     name: "", 
     email: "", 
     password: "", 
     confirmPassword: "",
-    studentId: "",
-    role: "student", 
-    department: "Academic" 
+    // FIXED: studentId removed from form state. It was collected by the input
+    // and marked `required`, but was never included in the payload sent to the
+    // backend — so the field silently swallowed user input and blocked
+    // submission for no reason. If the backend gains a student_id column,
+    // add it to both form state AND the payload at the same time.
+    department: "Academic",
+    role: "student",
   });
 
   const [error, setError] = useState("");
@@ -38,7 +46,6 @@ export default function Register() {
     if (e) e.preventDefault();
     setError("");
 
-    // Keep existing validation checks & add user-friendly alerts
     if (!form.name.trim()) {
       setError("Please provide your full legal name.");
       return;
@@ -62,17 +69,18 @@ export default function Register() {
 
     setLoading(true);
     try {
-      // Reconstruct the exact register payload expected by backend credentials rules:
       const payload = {
         name: form.name.trim(),
         email: form.email.trim(),
         password: form.password,
         role: "student",
-        department: form.department
+        department: form.department,
       };
 
       await register(payload);
-      navigate("/");
+      // BUG-13: navigate to intended destination (or "/" → RoleHome redirects
+      // based on role) instead of hardcoding "/".
+      navigate(from, { replace: true });
     } catch (err) {
       setError(err.response?.data?.detail || "Registration failed. This account may already exist.");
     } finally {
@@ -170,42 +178,22 @@ export default function Register() {
                 />
               </div>
 
-              {/* Row Grid: Student ID + Department */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
-                {/* Student ID Code */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-                    Student ID
-                  </label>
-                  <input 
-                    type="text"
-                    required
-                    value={form.studentId}
-                    onChange={(e) => setForm({ ...form, studentId: e.target.value })}
-                    placeholder="e.g. 2024-XXXX"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0c3127] transition-all"
-                  />
-                </div>
-
-                {/* Main Program selection dropdown */}
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-                    Department
-                  </label>
-                  <select 
-                    value={form.department}
-                    onChange={(e) => setForm({ ...form, department: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-705 focus:outline-none focus:ring-1 focus:ring-[#0c3127] cursor-pointer"
-                  >
-                    {["Academic", "Discipline", "Infrastructure", "Transport", "Administration"].map((item) => (
-                      <option key={item} value={item}>
-                        {item}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
+              {/* Department selector — full width now that Student ID is removed */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                  Department
+                </label>
+                <select 
+                  value={form.department}
+                  onChange={(e) => setForm({ ...form, department: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-705 focus:outline-none focus:ring-1 focus:ring-[#0c3127] cursor-pointer"
+                >
+                  {["Academic", "Discipline", "Infrastructure", "Transport", "Administration"].map((item) => (
+                    <option key={item} value={item}>
+                      {item}
+                    </option>
+                  ))}
+                </select>
               </div>
 
             </div>
