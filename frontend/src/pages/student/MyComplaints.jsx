@@ -48,7 +48,13 @@ export default function MyComplaints() {
   const getStepState = (status) => {
     const s = String(status || "").toLowerCase();
     if (s === "resolved") {
-      return { stepIndex: 4, label: "Resolved" };
+      return { stepIndex: 5, label: "Resolved" };
+    }
+    if (s === "awaiting verification") {
+      return { stepIndex: 4, label: "Awaiting Verification" };
+    }
+    if (s === "rejected") {
+      return { stepIndex: 5, label: "Rejected" };
     }
     if (s === "in progress") {
       return { stepIndex: 3, label: "Progress" };
@@ -114,6 +120,9 @@ export default function MyComplaints() {
           ? `Grievance #${c.id} assigned to ${c.assignee.name}`
           : `Grievance #${c.id} is under review`;
         subtext = "Investigation is active.";
+      } else if (s === "awaiting verification") {
+        heading = `Grievance #${c.id} is awaiting your verification`;
+        subtext = "Review the repair evidence and confirm whether the issue is fixed.";
       }
 
       entries.push({
@@ -175,7 +184,7 @@ export default function MyComplaints() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="appearance-none bg-white border border-slate-200 rounded-xl px-4 py-2.5 pr-10 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-700 cursor-pointer"
             >
-              {["All Statuses", "Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map((item) => (
+              {["All Statuses", "Submitted", "Under Review", "In Progress", "Awaiting Verification", "Resolved", "Rejected"].map((item) => (
                 <option key={item} value={item}>{item}</option>
               ))}
             </select>
@@ -237,6 +246,8 @@ export default function MyComplaints() {
                 badgeColor = "bg-rose-50 text-rose-800 border-rose-100/50 border";
               } else if (c.status === "Under Review") {
                 badgeColor = "bg-emerald-50 text-emerald-800 border-emerald-100/50 border";
+              } else if (c.status === "Awaiting Verification") {
+                badgeColor = "bg-amber-50 text-amber-900 border-amber-100/50 border";
               } else if (c.status === "Resolved") {
                 badgeColor = "bg-sky-50 text-sky-800 border-sky-100/50 border";
               } else if (c.status === "Rejected") {
@@ -265,12 +276,21 @@ export default function MyComplaints() {
                   <div className="relative py-6">
                     <div className="absolute top-1/2 left-0 w-full h-[2px] bg-slate-100 -translate-y-1/2" />
                     <div className="relative flex justify-between">
-                      {[
+                      {(c.status === "Rejected"
+                        ? [
+                          { step: 1, label: "Submitted" },
+                          { step: 2, label: "Review" },
+                          { step: 3, label: "Progress" },
+                          { step: 4, label: "Awaiting Verification" },
+                          { step: 5, label: "Rejected" }
+                        ]
+                        : [
                         { step: 1, label: "Submitted" },
                         { step: 2, label: "Review" },
                         { step: 3, label: "Progress" },
-                        { step: 4, label: "Resolved" }
-                      ].map((item) => {
+                        { step: 4, label: "Awaiting Verification" },
+                        { step: 5, label: "Resolved" }
+                      ]).map((item) => {
                         const isCompleted = stepIndex > item.step;
                         const isCurrent = stepIndex === item.step;
                         return (

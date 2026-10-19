@@ -1,6 +1,8 @@
-﻿import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
+import api from "../api/client";
+import { formatErrorMessage } from "../utils/errorMessage.js";
 import { 
   LayoutDashboard, 
   PlusCircle, 
@@ -13,7 +15,8 @@ import {
   Menu, 
   X,
   Scale,
-  HelpCircle
+  HelpCircle,
+  Bell
 } from "lucide-react";
 
 export default function AppLayout() {
@@ -21,6 +24,64 @@ export default function AppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [notificationsBusy, setNotificationsBusy] = useState(false);
+  const [notificationError, setNotificationError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await api.get("/notifications/mine");
+        if (active) {
+          setNotifications(response.data || []);
+          setNotificationError("");
+        }
+      } catch (error) {
+        if (active) setNotificationError(formatErrorMessage(error, "Could not load notifications."));
+      } finally {
+        if (active) setNotificationsLoading(false);
+      }
+    };
+
+    refresh();
+    const timer = window.setInterval(refresh, 45000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [user?.id]);
+
+  async function openNotification(item) {
+    setNotificationError("");
+    if (!item.is_read) {
+      try {
+        await api.patch(`/notifications/${item.id}/read`);
+        setNotifications((current) => current.map((notification) => (
+          notification.id === item.id ? { ...notification, is_read: true } : notification
+        )));
+      } catch (error) {
+        setNotificationError(formatErrorMessage(error, "Could not mark the notification as read."));
+      }
+    }
+    setNotificationsOpen(false);
+    if (item.complaint_id) navigate(`/complaints/${item.complaint_id}`);
+  }
+
+  async function markAllNotificationsRead() {
+    setNotificationsBusy(true);
+    setNotificationError("");
+    try {
+      await api.post("/notifications/read-all");
+      setNotifications((current) => current.map((notification) => ({ ...notification, is_read: true })));
+    } catch (error) {
+      setNotificationError(formatErrorMessage(error, "Could not mark notifications as read."));
+    } finally {
+      setNotificationsBusy(false);
+    }
+  }
 
   // Determine portal branding parameters dynamically based on user roles
   let brandName = "Student Portal";
@@ -95,6 +156,11 @@ export default function AppLayout() {
         label: "Complaints",
         path: "/admin/complaints",
         icon: ClipboardCheck,
+      },
+      {
+        label: "Verification Review",
+        path: "/admin/verification",
+        icon: History,
       },
       {
         label: "Users",
@@ -248,6 +314,73 @@ export default function AppLayout() {
       {/* Primary viewport content display wrapper */}
       <main className="flex-1 min-w-0 p-5 sm:p-8 md:p-10 overflow-y-auto w-full">
         <div className="max-w-6xl mx-auto">
+          <div className="relative mb-5 flex justify-end">
+            <button
+              type="button"
+              onClick={() => setNotificationsOpen((open) => !open)}
+              aria-expanded={notificationsOpen}
+              aria-label={`Notifications${notifications.some((item) => !item.is_read) ? `, ${notifications.filter((item) => !item.is_read).length} unread` : ""}`}
+              className="relative inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm hover:border-emerald-200 hover:text-emerald-900"
+            >
+              <Bell className="h-4 w-4" />
+              Notifications
+              {notifications.some((item) => !item.is_read) && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-black text-white">
+                  {notifications.filter((item) => !item.is_read).length > 99 ? "99+" : notifications.filter((item) => !item.is_read).length}
+                </span>
+              )}
+            </button>
+            {notificationsOpen && (
+              <div className="absolute right-0 top-12 z-50 w-[min(24rem,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                  <span className="text-sm font-extrabold text-slate-800">Notification center</span>
+                  <button
+                    type="button"
+                    onClick={markAllNotificationsRead}
+                    disabled={notificationsBusy || !notifications.some((item) => !item.is_read)}
+                    className="text-[10px] font-bold text-emerald-800 hover:underline disabled:opacity-50"
+                  >
+                    Mark all read
+                  </button>
+                </div>
+                {notificationError && (
+                  <div role="alert" className="border-b border-rose-100 bg-rose-50 px-4 py-2 text-xs text-rose-800">
+                    {notificationError}
+                  </div>
+                )}
+                <div className="max-h-96 overflow-y-auto">
+                  {notificationsLoading ? (
+                    <p className="p-6 text-center text-xs text-slate-500">Loading notifications...</p>
+                  ) : notifications.length === 0 ? (
+                    <p className="p-6 text-center text-xs text-slate-400">You're all caught up.</p>
+                  ) : notifications.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => openNotification(item)}
+                      className={`w-full border-b border-slate-50 px-4 py-3 text-left hover:bg-emerald-50/50 ${item.is_read ? "bg-white" : "bg-emerald-50/40"}`}
+                    >
+                      <span className="flex items-start gap-2">
+                        <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.is_read ? "bg-slate-200" : "bg-emerald-600"}`} />
+                        <span className="min-w-0">
+                          <span className="block text-xs font-extrabold text-slate-800">{item.title}</span>
+                          <span className="mt-1 block text-[11px] leading-relaxed text-slate-500">{item.message}</span>
+                          <time dateTime={item.created_at} className="mt-1 block text-[10px] text-slate-400">
+                            {new Date(item.created_at).toLocaleString()}
+                          </time>
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          {notificationError && !notificationsOpen && (
+            <p role="alert" className="mb-4 rounded-lg border border-rose-100 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+              {notificationError}
+            </p>
+          )}
           <Outlet />
         </div>
       </main>

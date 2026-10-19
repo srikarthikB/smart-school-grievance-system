@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, require_roles
@@ -9,8 +10,17 @@ from app.models.enums import ComplaintStatus, UserRole
 from app.models.feedback import Feedback
 from app.models.user import User
 from app.schemas.feedback import FeedbackCreate, FeedbackRead
+from app.services.complaint_visibility import can_view_complainant_identity, redact_anonymous_identity
 
 router = APIRouter()
+
+
+def _is_feedback_complaint_conflict(exc: IntegrityError) -> bool:
+    original = exc.orig
+    constraint_name = getattr(getattr(original, "diag", None), "constraint_name", None)
+    if constraint_name is not None:
+        return constraint_name == "feedback_complaint_id_key"
+    return "UNIQUE constraint failed: feedback.complaint_id" in str(original)
 
 
 @router.post("", response_model=FeedbackRead, status_code=status.HTTP_201_CREATED)
@@ -29,7 +39,13 @@ def submit_feedback(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Feedback already submitted")
     feedback = Feedback(complaint_id=complaint.id, rating=payload.rating, comment=payload.comment)
     db.add(feedback)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if _is_feedback_complaint_conflict(exc):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Feedback already submitted") from exc
+        raise
     db.refresh(feedback)
     return feedback
 
@@ -50,4 +66,13 @@ def get_feedback(
     )
     if not allowed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Complaint not found")
-    return db.scalar(select(Feedback).where(Feedback.complaint_id == complaint_id))
+    feedback = db.scalar(select(Feedback).where(Feedback.complaint_id == complaint_id))
+    if (
+        feedback
+        and feedback.comment is not None
+        and not can_view_complainant_identity(current_user, complaint)
+    ):
+        return FeedbackRead.model_validate(feedback).model_copy(
+            update={"comment": redact_anonymous_identity(feedback.comment, current_user, complaint)}
+        )
+    return feedback

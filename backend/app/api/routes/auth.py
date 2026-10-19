@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -11,6 +12,14 @@ from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.user import UserCreate, UserRead
 
 router = APIRouter()
+
+
+def _is_email_unique_violation(exc: IntegrityError) -> bool:
+    original = exc.orig
+    constraint_name = getattr(getattr(original, "diag", None), "constraint_name", None)
+    if constraint_name is not None:
+        return constraint_name == "ix_users_email"
+    return str(original) == "UNIQUE constraint failed: users.email"
 
 
 def _issue_token(user: User) -> str:
@@ -28,7 +37,7 @@ def _issue_token(user: User) -> str:
 def register(payload: UserCreate, db: Session = Depends(get_db)):
     if payload.role != UserRole.student:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Public registration is student-only")
-    existing = db.scalar(select(User).where(User.email == payload.email.lower()))
+    existing = db.scalar(select(User.id).where(func.lower(User.email) == payload.email.lower()))
     if existing:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     user = User(
@@ -39,7 +48,13 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
         department=payload.department,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if _is_email_unique_violation(exc):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered") from exc
+        raise
     db.refresh(user)
     return TokenResponse(access_token=_issue_token(user), user=user)
 
@@ -47,7 +62,7 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == payload.email.lower()))
-    if not user or not verify_password(payload.password, user.password_hash):
+    if not user or not verify_password(payload.password, user.password_hash) or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     return TokenResponse(access_token=_issue_token(user), user=user)
 
@@ -55,7 +70,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Invalidate all existing JWTs for this user by bumping token_version (BUG-04)."""
-    current_user.token_version += 1
+    db.execute(
+        update(User)
+        .where(User.id == current_user.id)
+        .values(token_version=User.token_version + 1)
+    )
     db.commit()
 
 

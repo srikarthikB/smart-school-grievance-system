@@ -1,7 +1,8 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext.jsx";
+import RepairWorkflow from "../components/RepairWorkflow.jsx";
 import { 
   FileText, 
   Lock, 
@@ -18,6 +19,12 @@ import {
   AlertCircle
 } from "lucide-react";
 
+const GENERIC_ADMIN_STATUS_TRANSITIONS = {
+  Submitted: ["Under Review", "Rejected"],
+  "Under Review": ["In Progress", "Rejected"],
+  "In Progress": ["Under Review", "Rejected"],
+};
+
 export default function ComplaintDetails() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -28,42 +35,83 @@ export default function ComplaintDetails() {
   const [status, setStatus] = useState("Under Review");
   const [notes, setNotes] = useState("");
   const [message, setMessage] = useState("");
+  const [statusError, setStatusError] = useState("");
   const [loadError, setLoadError] = useState("");
 
   const [attachments, setAttachments] = useState([]);
+  const [timeline, setTimeline] = useState([]);
+  const [timelineLoading, setTimelineLoading] = useState(true);
+  const [timelineError, setTimelineError] = useState("");
+  const detailLoadGeneration = useRef(0);
 
   function load() {
+    const generation = ++detailLoadGeneration.current;
     setLoadError("");
     api.get(`/complaints/${id}`)
       .then((res) => {
+        if (generation !== detailLoadGeneration.current) return;
         setComplaint(res.data);
-        setStatus(res.data.status);
+        setStatus(user?.role === "staff" ? "In Progress" : res.data.status);
         setNotes(res.data.resolution_notes || "");
       })
       .catch((err) => {
+        if (generation !== detailLoadGeneration.current) return;
         console.error("Failed to load complaint", err);
         setComplaint(null);
         setLoadError(err.response?.data?.detail || "Could not load complaint.");
       });
     api.get(`/feedback/${id}`)
-      .then((res) => setFeedback(res.data))
-      .catch(() => setFeedback(null));
+      .then((res) => {
+        if (generation === detailLoadGeneration.current) setFeedback(res.data);
+      })
+      .catch(() => {
+        if (generation === detailLoadGeneration.current) setFeedback(null);
+      });
+    setTimelineLoading(true);
+    setTimelineError("");
+    api.get(`/complaints/${id}/timeline`)
+      .then((res) => {
+        if (generation === detailLoadGeneration.current) setTimeline(res.data || []);
+      })
+      .catch((err) => {
+        if (generation !== detailLoadGeneration.current) return;
+        setTimeline([]);
+        setTimelineError(err.response?.data?.detail || "Could not load complaint timeline.");
+      })
+      .finally(() => {
+        if (generation === detailLoadGeneration.current) setTimelineLoading(false);
+      });
   }
 
   useEffect(() => {
+    setComplaint(null);
+    setTimeline([]);
+    setTimelineLoading(true);
     load();
+    return () => {
+      detailLoadGeneration.current += 1;
+    };
   }, [id]);
 
   // Existing update handler preserved
   async function updateStatus(e) {
     if (e) e.preventDefault();
+    setStatusError("");
     setMessage("");
+    if (
+      user?.role === "admin"
+      && status !== complaint.status
+      && !GENERIC_ADMIN_STATUS_TRANSITIONS[complaint.status]?.includes(status)
+    ) {
+      setStatusError("This status change is not available through generic status control. Use the dedicated verification review actions for workflow decisions.");
+      return;
+    }
     try {
       await api.patch(`/complaints/${id}/status`, { status, resolution_notes: notes });
       setMessage("Status updated successfully");
       load();
     } catch (err) {
-      setMessage(err.response?.data?.detail || "Update failed");
+      setStatusError(err.response?.data?.detail || "Status update failed. This transition may require a dedicated workflow action.");
     }
   }
 
@@ -117,7 +165,13 @@ export default function ComplaintDetails() {
   const getStatusProgress = (s) => {
     const current = String(s || "").toLowerCase();
     if (current === "resolved") {
-      return { index: 4, label: "Resolved" };
+      return { index: 5, label: "Resolved" };
+    }
+    if (current === "rejected") {
+      return { index: 5, label: "Rejected" };
+    }
+    if (current === "awaiting verification") {
+      return { index: 4, label: "Awaiting Verification" };
     }
     if (current === "in progress") {
       return { index: 3, label: "In Progress" };
@@ -129,7 +183,11 @@ export default function ComplaintDetails() {
   };
 
   const statusProgress = getStatusProgress(complaint.status);
-  const progressPercent = Math.round((statusProgress.index / 4) * 100);
+  const progressPercent = Math.round((statusProgress.index / 5) * 100);
+  const adminStatusOptions = [
+    complaint.status,
+    ...(GENERIC_ADMIN_STATUS_TRANSITIONS[complaint.status] || []),
+  ];
 
   // Avatar Initials
   const getInitials = (name) => {
@@ -192,7 +250,13 @@ export default function ComplaintDetails() {
               { idx: 1, label: "Submitted", statusText: "COMPLETED", date: getDayOnlyStr(complaint.created_at) },
               { idx: 2, label: "Under Review", statusText: "COMPLETED", date: getDayOnlyStr(complaint.updated_at) },
               { idx: 3, label: "In Progress", statusText: "IN PROGRESS", date: getDayOnlyStr(complaint.updated_at) },
-              { idx: 4, label: "Resolved", statusText: "PENDING", date: "PENDING" }
+              { idx: 4, label: "Awaiting Verification", statusText: "AWAITING VERIFICATION", date: getDayOnlyStr(complaint.updated_at) },
+              {
+                idx: 5,
+                label: complaint.status === "Rejected" ? "Rejected" : "Resolved",
+                statusText: complaint.status === "Rejected" ? "REJECTED" : "PENDING",
+                date: complaint.status === "Rejected" ? getDayOnlyStr(complaint.updated_at) : "PENDING"
+              }
             ].map((milestone) => {
               const isCompleted = statusProgress.index > milestone.idx || complaint.status === "Resolved";
               const isCurrent = statusProgress.index === milestone.idx && complaint.status !== "Resolved";
@@ -297,21 +361,33 @@ export default function ComplaintDetails() {
             <div className="bg-gradient-to-br from-slate-900 to-slate-950 rounded-3xl p-6 sm:p-8 text-white flex flex-col gap-6 shadow-sm">
               <div className="flex items-center gap-2.5 border-b border-slate-800 pb-4">
                 <UserCheck className="h-5 w-5 text-emerald-400 shrink-0" />
-                <h3 className="font-extrabold text-lg tracking-tight text-white">Staff / Admin Controller Panel</h3>
+                <h3 className="font-extrabold text-lg tracking-tight text-white">
+                  {user?.role === "admin" ? "Administrator Status Control" : "Staff Work Status"}
+                </h3>
               </div>
 
+              {(user?.role === "admin" || ["Under Review", "In Progress"].includes(complaint.status)) ? (
               <form onSubmit={updateStatus} className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
                   <label className="text-[10px] font-black uppercase tracking-wider text-slate-300">Set Resolution Status</label>
-                  <select 
-                    value={status} 
-                    onChange={(e) => setStatus(e.target.value)}
-                    className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl p-3 text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                  >
-                    {["Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map((item) => (
-                      <option key={item} value={item} className="text-slate-900 font-semibold">{item}</option>
-                    ))}
-                  </select>
+                  {user?.role === "admin" && adminStatusOptions.length === 1 ? (
+                    <p className="rounded-xl border border-slate-700/80 bg-slate-800/80 p-3 text-xs font-bold text-slate-300">
+                      {complaint.status}
+                      {complaint.status === "Awaiting Verification"
+                        ? " — use the dedicated verification review actions"
+                        : " — no generic status changes are available"}
+                    </p>
+                  ) : (
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value)}
+                      className="w-full bg-slate-800/80 border border-slate-700/80 rounded-xl p-3 text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                    >
+                      {(user?.role === "admin" ? adminStatusOptions : ["In Progress"]).map((item) => (
+                        <option key={item} value={item} className="text-slate-900 font-semibold">{item}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-2 md:col-span-2">
@@ -325,8 +401,13 @@ export default function ComplaintDetails() {
                 </div>
 
                 <div className="md:col-span-2 flex items-center justify-between gap-4 pt-2">
+                  {statusError && (
+                    <p role="alert" className="text-xs text-rose-300 font-bold">
+                      {statusError}
+                    </p>
+                  )}
                   {message && (
-                    <div className="text-xs text-emerald-300 font-bold flex items-center gap-1.5">
+                    <div role="status" className="text-xs text-emerald-300 font-bold flex items-center gap-1.5">
                       <CheckCircle2 className="h-4 w-4 shrink-0" />
                       {message}
                     </div>
@@ -339,6 +420,11 @@ export default function ComplaintDetails() {
                   </button>
                 </div>
               </form>
+              ) : (
+                <p className="text-xs text-slate-300">
+                  This complaint is awaiting verification or is closed. Staff can submit more repair evidence when another repair is requested.
+                </p>
+              )}
             </div>
           )}
 
@@ -381,6 +467,15 @@ export default function ComplaintDetails() {
         {/* Right Side Sidebar Widgets (4 cols) */}
         <div className="lg:col-span-4 flex flex-col gap-8 w-full text-left">
           
+          <RepairWorkflow
+            complaintId={complaint.id}
+            mode={user?.role}
+            status={complaint.status}
+            isOwner={complaint.created_by === user?.id}
+            assignedToCurrentUser={complaint.assigned_to === user?.id}
+            onUpdated={load}
+          />
+
           {/* Evidence Attachments Panel */}
           <div className="bg-white rounded-3xl border border-slate-200/60 p-6 flex flex-col gap-4 shadow-2xs">
             <div className="flex items-center gap-2 text-slate-700 pb-3 border-b border-slate-100">
@@ -427,39 +522,36 @@ export default function ComplaintDetails() {
               <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Timeline &amp; History</span>
             </div>
 
-            <div className="relative pl-4 py-5 font-semibold">
-              {/* Center vertical linking line */}
-              <div className="absolute top-6 bottom-6 left-[19px] w-[1px] bg-slate-200" />
-
-              <div className="flex flex-col gap-6">
-                {[
-                  {
-                    status: complaint.status || "Submitted",
-                    time: formatFullDate(complaint.updated_at),
-                    desc: `Current status is ${complaint.status || "Submitted"}.`
-                  },
-                  {
-                    status: "Submitted",
-                    time: formatFullDate(complaint.created_at),
-                    desc: "Complaint record created."
-                  }
-                ].map((log, idx) => (
-                  <div key={idx} className="relative pl-6">
-                    <div className="absolute left-[3px] top-1 h-1.5 w-1.5 rounded-full bg-emerald-700 ring-4 ring-emerald-50" />
-                    
-                    <span className="text-[9px] text-slate-400 font-black block mb-0.5">
-                      {log.time}
-                    </span>
-                    <strong className="text-xs font-black text-slate-800 leading-tight block">
-                      {log.status}
-                    </strong>
-                    <span className="text-[11px] text-slate-500 font-semibold leading-relaxed block mt-1">
-                      {log.desc}
-                    </span>
-                  </div>
-                ))}
+            {timelineLoading ? (
+              <p className="py-5 text-xs text-slate-500">Loading activity history...</p>
+            ) : timelineError ? (
+              <p role="alert" className="py-5 text-xs font-semibold text-rose-700">{timelineError}</p>
+            ) : timeline.length === 0 ? (
+              <p className="py-5 text-xs text-slate-500">No activity history is available yet.</p>
+            ) : (
+              <div className="relative py-5 pl-4">
+                <div className="absolute top-6 bottom-6 left-[19px] w-px bg-slate-200" />
+                <ol className="space-y-6 font-semibold">
+                  {timeline.map((event) => (
+                    <li key={event.id} className="relative pl-6">
+                      <div className="absolute left-[3px] top-1 h-1.5 w-1.5 rounded-full bg-emerald-700 ring-4 ring-emerald-50" />
+                      <span className="mb-0.5 block text-[9px] text-slate-400 font-black">
+                        {formatFullDate(event.created_at)}
+                      </span>
+                      <strong className="block text-xs font-black leading-tight text-slate-800">
+                        {event.event_type?.replace(/_/g, " ") || "Activity"}
+                      </strong>
+                      <span className="mt-1 block whitespace-pre-wrap text-[11px] font-semibold leading-relaxed text-slate-500">
+                        {event.message}
+                      </span>
+                      {event.actor?.name && (
+                        <span className="mt-1 block text-[10px] text-slate-400">By {event.actor.name}</span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Resolution Info Box */}

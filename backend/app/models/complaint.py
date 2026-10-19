@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.db.session import Base
+from app.db.base import Base
 from app.models.enums import ComplaintCategory, ComplaintPriority, ComplaintStatus, enum_values
 
 
@@ -42,3 +42,26 @@ class Complaint(Base):
     creator = relationship("User", foreign_keys=[created_by], back_populates="created_complaints")
     assignee = relationship("User", foreign_keys=[assigned_to], back_populates="assigned_complaints")
     feedback = relationship("Feedback", back_populates="complaint", cascade="all, delete-orphan", uselist=False)
+    attachments = relationship(
+        "ComplaintAttachment",
+        back_populates="complaint",
+        cascade="all, delete-orphan",
+        order_by="ComplaintAttachment.created_at",
+    )
+    events = relationship(
+        "ComplaintEvent",
+        back_populates="complaint",
+        cascade="all, delete-orphan",
+        order_by="ComplaintEvent.created_at",
+    )
+    notifications = relationship(
+        "Notification",
+        back_populates="complaint",
+        cascade="all, delete-orphan",
+    )
+    repair_submissions = relationship(
+        "ComplaintRepairSubmission",
+        back_populates="complaint",
+        cascade="all, delete-orphan",
+        order_by="ComplaintRepairSubmission.submitted_at",
+    )

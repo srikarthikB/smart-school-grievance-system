@@ -1,6 +1,5 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import ExpiredSignatureError, JWTError
 from sqlalchemy.orm import Session
 
 from app.core.security import decode_access_token
@@ -18,17 +17,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # BUG-01: Distinguish expired tokens from invalid ones so the client
-    # can act accordingly (e.g. attempt a refresh vs. force re-login).
     try:
         payload = decode_access_token(token)
-    except ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    except (JWTError, Exception):
+    except ValueError:
         raise credentials_error
 
     try:
@@ -37,7 +28,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_error
 
     user = db.get(User, user_id)
-    if not user:
+    if not user or not user.is_active:
         raise credentials_error
 
     # BUG-03: Guard against DB rows that stored the role as a raw string

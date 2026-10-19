@@ -16,6 +16,7 @@ import StaffComplaints from "./pages/staff/StaffComplaints.jsx";
 import StaffDashboard from "./pages/staff/StaffDashboard.jsx";
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import ComplaintManagement from "./pages/admin/ComplaintManagement.jsx";
+import VerificationReview from "./pages/admin/VerificationReview.jsx";
 import UserManagement from "./pages/admin/UserManagement.jsx";
 import AnalyticsDashboard from "./pages/admin/AnalyticsDashboard.jsx";
 import StaffClosedCases from "./pages/staff/StaffClosedCases.jsx";
@@ -55,6 +56,7 @@ function RouterBoundary() {
         <Route path="/staff/settings" element={<ProtectedRoute roles={[ROLES.STAFF]}><StaffSettings /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute roles={[ROLES.ADMIN]}><AdminDashboard /></ProtectedRoute>} />
         <Route path="/admin/complaints" element={<ProtectedRoute roles={[ROLES.ADMIN]}><ComplaintManagement /></ProtectedRoute>} />
+        <Route path="/admin/verification" element={<ProtectedRoute roles={[ROLES.ADMIN]}><VerificationReview /></ProtectedRoute>} />
         <Route path="/admin/users" element={<ProtectedRoute roles={[ROLES.ADMIN]}><UserManagement /></ProtectedRoute>} />
         <Route path="/admin/analytics" element={<ProtectedRoute roles={[ROLES.ADMIN]}><AnalyticsDashboard /></ProtectedRoute>} />
         {/* BUG-07: All roles can reach this route, but the backend GET
