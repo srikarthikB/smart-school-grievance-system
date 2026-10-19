@@ -1,7 +1,12 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+BACKEND_ENV_FILE = BACKEND_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -9,13 +14,13 @@ class Settings(BaseSettings):
     secret_key: str = Field(..., min_length=32, alias="SECRET_KEY")
     access_token_expire_minutes: int = Field(1440, alias="ACCESS_TOKEN_EXPIRE_MINUTES")
     backend_cors_origins: str = Field(
-        "http://localhost:5173,http://127.0.0.1:5173",
+        "http://localhost:5173,http://127.0.0.1:5173,http://192.168.0.3:5173",
         alias="BACKEND_CORS_ORIGINS",
     )
     verification_reminder_hours: int = Field(24, ge=1, alias="VERIFICATION_REMINDER_HOURS")
     verification_review_hours: int = Field(72, ge=1, alias="VERIFICATION_REVIEW_HOURS")
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=BACKEND_ENV_FILE, extra="ignore")
 
     @field_validator("backend_cors_origins")
     @classmethod
