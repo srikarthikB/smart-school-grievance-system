@@ -17,6 +17,12 @@ import {
   Paperclip
 } from "lucide-react";
 
+const GENERIC_ADMIN_STATUS_TRANSITIONS = {
+  Submitted: ["Under Review", "Rejected"],
+  "Under Review": ["In Progress", "Rejected"],
+  "In Progress": ["Under Review", "Rejected"],
+};
+
 export default function ComplaintManagement() {
   const [complaints, setComplaints] = useState([]);
   const [staff, setStaff] = useState([]);
@@ -97,34 +103,74 @@ export default function ComplaintManagement() {
       setDrawerStatus(activeComplaint.status || "Submitted");
       // Match staff by id (assigned_to) rather than name to avoid false mismatches
       setDrawerStaffId(activeComplaint.assigned_to ? String(activeComplaint.assigned_to) : "");
-      setSuccessMessage("");
-      setErrorMessage("");
     }
   }, [activeComplaint]);
+
+  useEffect(() => {
+    setSuccessMessage("");
+    setErrorMessage("");
+  }, [selectedId]);
 
   async function handleUpdateGrievanceState() {
     if (!activeComplaint) return;
     setSuccessMessage("");
     setErrorMessage("");
+    if (!drawerStaffId && activeComplaint.assigned_to) {
+      setErrorMessage("Unassigning a staff member is not supported. Select a different staff member to reassign.");
+      return;
+    }
+
+    const assignmentChanged = Boolean(drawerStaffId)
+      && String(activeComplaint.assigned_to || "") !== drawerStaffId;
+    const expectedStatusAfterAssignment = assignmentChanged && activeComplaint.status === "Submitted"
+      ? "Under Review"
+      : activeComplaint.status;
+    const statusIsStaleAfterAssignment = assignmentChanged
+      && drawerStatus === activeComplaint.status
+      && expectedStatusAfterAssignment !== activeComplaint.status;
+    const statusRemainsUnchanged = drawerStatus === expectedStatusAfterAssignment
+      || statusIsStaleAfterAssignment;
+    const statusChangeIsValid = GENERIC_ADMIN_STATUS_TRANSITIONS[expectedStatusAfterAssignment]
+      ?.includes(drawerStatus);
+    if (!statusRemainsUnchanged && !statusChangeIsValid) {
+      setErrorMessage("That status transition is not available through generic status control. Use the dedicated verification review actions for workflow decisions.");
+      return;
+    }
+
+    let assignmentSucceeded = false;
     try {
-      if (drawerStaffId) {
-        await api.patch(`/complaints/${activeComplaint.id}/assign`, { 
+      let statusAfterAssignment = activeComplaint.status;
+      if (assignmentChanged) {
+        const assignmentResponse = await api.patch(`/complaints/${activeComplaint.id}/assign`, {
           staff_id: Number(drawerStaffId) 
         });
-      } else if (activeComplaint.assigned_to) {
-        setErrorMessage("Unassigning a staff member is not supported. Select a different staff member to reassign.");
-        return;
+        assignmentSucceeded = true;
+        statusAfterAssignment = assignmentResponse.data?.status || expectedStatusAfterAssignment;
       }
 
-      await api.patch(`/complaints/${activeComplaint.id}/status`, { 
-        status: drawerStatus 
-      });
+      const assignmentAdvancedStatus = assignmentSucceeded
+        && drawerStatus === activeComplaint.status
+        && statusAfterAssignment !== activeComplaint.status;
+      if (!assignmentAdvancedStatus && drawerStatus !== statusAfterAssignment) {
+        const validTransitionAfterAssignment = GENERIC_ADMIN_STATUS_TRANSITIONS[statusAfterAssignment]
+          ?.includes(drawerStatus);
+        if (!validTransitionAfterAssignment) {
+          setErrorMessage(`Staff assignment succeeded, but ${drawerStatus} cannot be set through generic status control from ${statusAfterAssignment}.`);
+          load();
+          return;
+        }
+        await api.patch(`/complaints/${activeComplaint.id}/status`, { status: drawerStatus });
+      }
 
-      setSuccessMessage("State updated successfully!");
+      setSuccessMessage(assignmentSucceeded ? "Staff assignment and status saved." : "State updated successfully!");
       setTimeout(() => setSuccessMessage(""), 3000);
       load();
     } catch (err) {
-      setErrorMessage(err.response?.data?.detail || "Failed to update state");
+      const detail = err.response?.data?.detail || "Failed to update state.";
+      setErrorMessage(assignmentSucceeded
+        ? `Staff assignment succeeded, but the status update failed: ${detail}`
+        : detail);
+      if (assignmentSucceeded) load();
     }
   }
 
@@ -286,7 +332,7 @@ export default function ComplaintManagement() {
                   className="bg-slate-50 border border-slate-150 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-600 cursor-pointer"
                 >
                   <option value="All">All Statuses</option>
-                  {["Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map(s => (
+                  {["Submitted", "Under Review", "In Progress", "Awaiting Verification", "Resolved", "Rejected"].map(s => (
                     <option key={s} value={s}>{s}</option>
                   ))}
                 </select>
@@ -470,12 +516,20 @@ export default function ComplaintManagement() {
                   <select 
                     value={drawerStatus} 
                     onChange={(e) => setDrawerStatus(e.target.value)}
+                    disabled={!GENERIC_ADMIN_STATUS_TRANSITIONS[activeComplaint.status]?.length}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-700 cursor-pointer"
                   >
-                    {["Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map(s => (
+                    {[activeComplaint.status, ...(GENERIC_ADMIN_STATUS_TRANSITIONS[activeComplaint.status] || [])].map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
+                  {!GENERIC_ADMIN_STATUS_TRANSITIONS[activeComplaint.status]?.length && (
+                    <p className="text-[10px] leading-relaxed text-amber-700">
+                      {activeComplaint.status === "Awaiting Verification"
+                        ? "Use the dedicated verification review actions to remind, return, or close this complaint."
+                        : "No generic status changes are available for this complaint."}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1">

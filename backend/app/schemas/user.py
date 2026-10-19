@@ -26,17 +26,19 @@ class UserUpdate(BaseModel):
 
 
 class AdminUserUpdate(BaseModel):
-    """Fields an admin may update on any user, including role and email."""
+    """Fields an admin may update on any user, including access status."""
 
     name: str | None = Field(default=None, min_length=2, max_length=120)
     email: EmailStr | None = None
     role: UserRole | None = None
     department: Department | None = None
     password: str | None = Field(default=None, min_length=6)
+    is_active: bool = True
 
 
 class UserRead(UserBase):
     id: int
     created_at: datetime
+    is_active: bool
 
     model_config = ConfigDict(from_attributes=True)

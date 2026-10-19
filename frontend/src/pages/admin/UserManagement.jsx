@@ -10,7 +10,6 @@ import {
   Download, 
   Edit2, 
   ShieldCheck, 
-  Trash2, 
   UserX, 
   UserCheck, 
   X, 
@@ -133,16 +132,21 @@ export default function UserManagement() {
     }
   }
 
-  async function removeUser(id) {
-    if (window.confirm("Are you sure you want to permanently delete this user account from the registry?")) {
-      try {
-        await api.delete(`/users/${id}`);
-        setSuccessMsg("University user account removed successfully.");
-        setTimeout(() => setSuccessMsg(""), 4000);
-        load();
-      } catch (err) {
-        setMessage(err.response?.data?.detail || "Failed to delete user.");
-      }
+  async function toggleUserStatus(user) {
+    const nextIsActive = !user.is_active;
+    const action = nextIsActive ? "reactivated" : "deactivated";
+    const prompt = nextIsActive
+      ? `Reactivate ${user.name}'s account?`
+      : `Deactivate ${user.name}'s account? Grievance records will be preserved.`;
+    if (!window.confirm(prompt)) return;
+
+    try {
+      await api.patch(`/users/${user.id}`, { is_active: nextIsActive });
+      setSuccessMsg(`User account ${action}; grievance records were preserved.`);
+      setTimeout(() => setSuccessMsg(""), 4000);
+      load();
+    } catch (err) {
+      setMessage(err.response?.data?.detail || `Failed to ${nextIsActive ? "reactivate" : "deactivate"} user.`);
     }
   }
 
@@ -170,7 +174,7 @@ export default function UserManagement() {
   const handleExportCSV = () => {
     const headers = "UserID,Name,Email,Role,Department,Status\n";
     const rows = filteredUsers.map((u) => {
-      return `${u.id},"${u.name}","${u.email}","${u.role}","${u.department || "None"}","Not provided"`;
+      return `${u.id},"${u.name}","${u.email}","${u.role}","${u.department || "None"}","${u.is_active ? "Active" : "Deactivated"}"`;
     }).join("\n");
     const blob = new Blob([headers + rows], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
@@ -213,6 +217,9 @@ export default function UserManagement() {
       if (deptFilter !== "All") {
         if (u.department !== deptFilter) return false;
       }
+
+      if (statusFilter === "Active" && !u.is_active) return false;
+      if (statusFilter === "Deactivated" && u.is_active) return false;
 
       return true;
     });
@@ -416,16 +423,16 @@ export default function UserManagement() {
             </select>
           </div>
 
-          {/* Account status is unavailable until the backend exposes it */}
           <div className="flex flex-col gap-1.5">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Account Status</label>
             <select 
               value={statusFilter} 
               onChange={(e) => setStatusFilter(e.target.value)}
-              disabled
-              className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-400 focus:outline-none cursor-not-allowed"
+              className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:outline-none cursor-pointer"
             >
-              <option value="All">Not provided</option>
+              <option value="All">All Accounts</option>
+              <option value="Active">Active</option>
+              <option value="Deactivated">Deactivated</option>
             </select>
           </div>
 
@@ -459,7 +466,9 @@ export default function UserManagement() {
                 </tr>
               ) : (
                 filteredUsers.map((u) => {
-                  const statusCardClass = "bg-slate-50 text-slate-500 border-slate-200";
+                  const statusCardClass = u.is_active
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-rose-50 text-rose-700 border-rose-200";
 
                   // Role badging style mapping
                   let roleCardClass = "bg-slate-100 text-slate-700 border-slate-200";
@@ -527,11 +536,10 @@ export default function UserManagement() {
                         </div>
                       </td>
 
-                      {/* Account status is unavailable until the backend exposes it */}
                       <td className="px-6 py-4 whitespace-nowrap text-xs">
                         <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusCardClass}`}>
                           <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                          Not provided
+                          {u.is_active ? "Active" : "Deactivated"}
                         </span>
                       </td>
 
@@ -561,13 +569,18 @@ export default function UserManagement() {
                             <ShieldCheck className="h-3.5 w-3.5" />
                           </button>
 
-                          {/* Delete catalog trigger row */}
                           <button 
-                            onClick={() => removeUser(u.id)}
-                            className="p-1.5 border border-slate-205 text-slate-400 hover:text-rose-600 hover:bg-rose-50/70 rounded-xl transition-all cursor-pointer"
-                            title="Delete Account permanently"
+                            onClick={() => toggleUserStatus(u)}
+                            className={`p-1.5 border border-slate-205 rounded-xl transition-all cursor-pointer ${
+                              u.is_active
+                                ? "text-slate-400 hover:text-rose-600 hover:bg-rose-50/70"
+                                : "text-slate-400 hover:text-emerald-700 hover:bg-emerald-50"
+                            }`}
+                            title={u.is_active ? "Deactivate account" : "Reactivate account"}
                           >
-                            <Trash2 className="h-3.5 w-3.5" />
+                            {u.is_active
+                              ? <UserX className="h-3.5 w-3.5" />
+                              : <UserCheck className="h-3.5 w-3.5" />}
                           </button>
 
                         </div>

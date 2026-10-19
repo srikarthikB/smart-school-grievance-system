@@ -5,6 +5,30 @@ __pycache__/
 
 # Environment
 .env
+.env.*
+!.env*.example
+
+# Private keys and certificates
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.ppk
+*.crt
+*.cer
+*.der
+
+# Database dumps and backups
+*.dump
+*.backup
+*.bak
+*.sql.gz
+*.sql.bz2
+*.sql.xz
+*.sql.zst
+*dump*.sql
+*backup*.sql
 
 # Node
 node_modules/

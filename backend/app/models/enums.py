@@ -35,6 +35,7 @@ class ComplaintStatus(StrEnum):
     Submitted = "Submitted"
     UnderReview = "Under Review"
     InProgress = "In Progress"
+    AwaitingVerification = "Awaiting Verification"
     Resolved = "Resolved"
     Rejected = "Rejected"
 

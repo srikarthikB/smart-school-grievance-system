@@ -23,6 +23,7 @@ const STATUS = {
   submitted: "Submitted",
   under_review: "Under Review",
   in_progress: "In Progress",
+  awaiting_verification: "Awaiting Verification",
   resolved: "Resolved",
   rejected: "Rejected",
 };
@@ -78,6 +79,12 @@ const STATUS_CONFIG = {
     icon: Activity,
     badge: "bg-blue-50 text-blue-800 border border-blue-200",
     dot: "bg-blue-500",
+  },
+  "awaiting verification": {
+    label: "Awaiting Verification",
+    icon: Clock,
+    badge: "bg-amber-50 text-amber-900 border border-amber-200",
+    dot: "bg-amber-500",
   },
   resolved: {
     label: "Resolved",
@@ -180,18 +187,19 @@ export default function StaffDashboard() {
   // ── derived counts ──────────────────────────────────────────────────────
   const counts = useMemo(() => {
     const total = complaints.length;
-    let submitted = 0, underReview = 0, inProgress = 0, resolved = 0, rejected = 0;
+    let submitted = 0, underReview = 0, inProgress = 0, awaitingVerification = 0, resolved = 0, rejected = 0;
     for (const c of complaints) {
       const s = normaliseStatus(c.status);
       if (s === "submitted") submitted++;
       else if (s === "under review") underReview++;
       else if (s === "in progress") inProgress++;
+      else if (s === "awaiting verification") awaitingVerification++;
       else if (s === "resolved") resolved++;
       else if (s === "rejected") rejected++;
     }
-    const active = submitted + underReview + inProgress;
+    const active = submitted + underReview + inProgress + awaitingVerification;
     const closed = resolved + rejected;
-    return { total, submitted, underReview, inProgress, resolved, rejected, active, closed };
+    return { total, submitted, underReview, inProgress, awaitingVerification, resolved, rejected, active, closed };
   }, [complaints]);
 
   // ── recent activity: last 8 complaints sorted by updated_at desc ────────
@@ -254,7 +262,7 @@ export default function StaffDashboard() {
         <h2 className="text-[10.5px] font-black uppercase tracking-widest text-slate-400 mb-3">
           Case Overview
         </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7 gap-3">
           <StatCard
             label="Total Assigned"
             value={counts.total}
@@ -275,6 +283,11 @@ export default function StaffDashboard() {
             label="In Progress"
             value={counts.inProgress}
             icon={Activity}
+          />
+          <StatCard
+            label="Awaiting Verification"
+            value={counts.awaitingVerification}
+            icon={Clock}
           />
           <StatCard
             label="Resolved"

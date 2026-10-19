@@ -2,6 +2,8 @@
 import { Link } from "react-router-dom";
 import api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext.jsx";
+import RepairWorkflow from "../../components/RepairWorkflow.jsx";
+import { formatErrorMessage } from "../../utils/errorMessage.js";
 import { 
   Search, 
   Bell, 
@@ -32,6 +34,8 @@ export default function StaffComplaints() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [showStatusPopover, setShowStatusPopover] = useState(false);
   const [actionSuccessMessage, setActionSuccessMessage] = useState("");
+  const [actionErrorMessage, setActionErrorMessage] = useState("");
+  const [updatingStatus, setUpdatingStatus] = useState(false);
   const [statusDraft, setStatusDraft] = useState("Under Review");
   const [resolutionNotesDraft, setResolutionNotesDraft] = useState("");
 
@@ -65,10 +69,11 @@ export default function StaffComplaints() {
 
   useEffect(() => {
     if (selectedComplaint) {
-      setStatusDraft(selectedComplaint.status || "Under Review");
+      setStatusDraft("In Progress");
       setResolutionNotesDraft(selectedComplaint.resolution_notes || "");
       setShowStatusPopover(false);
       setActionSuccessMessage("");
+      setActionErrorMessage("");
     }
   }, [selectedComplaint]);
 
@@ -92,6 +97,8 @@ export default function StaffComplaints() {
         matchesStatus = s === "under review";
       } else if (statusFilter === "In Progress") {
         matchesStatus = s === "in progress";
+      } else if (statusFilter === "Awaiting Verification") {
+        matchesStatus = s === "awaiting verification";
       } else if (statusFilter === "Resolved") {
         matchesStatus = s === "resolved";
       } else if (statusFilter === "Rejected") {
@@ -105,9 +112,12 @@ export default function StaffComplaints() {
   const handleConfirmStatusUpdate = async (e) => {
     if (e) e.preventDefault();
     if (!selectedComplaint) return;
+    setActionErrorMessage("");
+    setActionSuccessMessage("");
+    setUpdatingStatus(true);
     try {
       await api.patch(`/complaints/${selectedComplaint.id}/status`, {
-        status: statusDraft,
+        status: "In Progress",
         resolution_notes: resolutionNotesDraft
       });
       setShowStatusPopover(false);
@@ -123,7 +133,9 @@ export default function StaffComplaints() {
       }
     } catch (err) {
       console.error("Failed to update status", err);
-      setActionSuccessMessage(err.response?.data?.detail || "Failed to update status.");
+      setActionErrorMessage(formatErrorMessage(err, "Failed to update status."));
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -214,7 +226,7 @@ export default function StaffComplaints() {
 
           {/* Status filter pills */}
           <div className="flex flex-wrap gap-2">
-            {["All", "Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map((f) => (
+            {["All", "Submitted", "Under Review", "In Progress", "Awaiting Verification", "Resolved", "Rejected"].map((f) => (
               <button
                 key={f}
                 onClick={() => setStatusFilter(f)}
@@ -296,6 +308,11 @@ export default function StaffComplaints() {
                     {actionSuccessMessage}
                   </div>
                 )}
+                {actionErrorMessage && (
+                  <div role="alert" className="rounded-xl border border-rose-100 bg-rose-50 p-3 text-xs font-bold text-rose-800">
+                    {actionErrorMessage}
+                  </div>
+                )}
 
                 {/* Student identity */}
                 <div className="flex items-center gap-3.5 bg-slate-50/60 border border-slate-150 rounded-2xl p-4">
@@ -363,6 +380,14 @@ export default function StaffComplaints() {
                   </div>
                 </div>
 
+                <RepairWorkflow
+                  complaintId={selectedComplaint.id}
+                  mode="staff"
+                  status={selectedComplaint.status}
+                  assignedToCurrentUser={selectedComplaint.assigned_to === user?.id}
+                  onUpdated={loadData}
+                />
+
                 {/* Status Update Form */}
                 {showStatusPopover ? (
                   <div className="bg-slate-50 border border-emerald-800/10 rounded-2xl p-5 flex flex-col gap-4">
@@ -384,7 +409,7 @@ export default function StaffComplaints() {
                           onChange={(e) => setStatusDraft(e.target.value)}
                           className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-[#0c3127] cursor-pointer"
                         >
-                          {["Submitted", "Under Review", "In Progress", "Resolved", "Rejected"].map(s => (
+                          {["In Progress"].map(s => (
                             <option key={s} value={s}>{s}</option>
                           ))}
                         </select>
@@ -402,23 +427,28 @@ export default function StaffComplaints() {
 
                       <button
                         type="submit"
+                        disabled={updatingStatus}
                         className="w-full bg-[#0c3127] hover:bg-[#0f4033] py-3 tracking-wider font-black text-xs text-white rounded-xl uppercase shadow-sm active:scale-98 transition-all cursor-pointer"
                       >
-                        Confirm Update
+                        {updatingStatus ? "Updating..." : "Start / Update Work"}
                       </button>
                     </form>
                   </div>
                 ) : null}
 
                 {/* Primary CTA */}
-                <button 
+                {["Under Review", "In Progress"].includes(selectedComplaint.status) && <button
                   type="button"
-                  onClick={() => setShowStatusPopover(true)}
+                  onClick={() => {
+                    setStatusDraft("In Progress");
+                    setActionErrorMessage("");
+                    setShowStatusPopover(true);
+                  }}
                   className="w-full bg-[#0c3127] hover:bg-[#0f4033] text-white py-3.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer shadow-3xs active:scale-98 transition-all mt-1"
                 >
-                  <span>Update Status / Mark Resolved</span>
+                  <span>Start / Update Work</span>
                   <ArrowUpRight className="h-4 w-4" />
-                </button>
+                </button>}
 
                 {/* Link to full detail page */}
                 <Link

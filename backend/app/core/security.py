@@ -4,7 +4,7 @@ from typing import Any
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
-from app.core.config import settings
+from app.core.config import get_settings
 
 ALGORITHM = "HS256"
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -19,6 +19,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(subject: str, extra_claims: dict[str, Any] | None = None) -> str:
+    settings = get_settings()
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
     payload: dict[str, Any] = {"sub": subject, "exp": expire}
     if extra_claims:
@@ -27,6 +28,7 @@ def create_access_token(subject: str, extra_claims: dict[str, Any] | None = None
 
 
 def decode_access_token(token: str) -> dict[str, Any]:
+    settings = get_settings()
     try:
         return jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
     except JWTError as exc:

@@ -1,4 +1,4 @@
-﻿import React, { useState } from "react";
+﻿import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/client";
 import { 
@@ -26,7 +26,13 @@ export default function CreateComplaint() {
     is_anonymous: false,
   });
   const [error, setError] = useState("");
+  const [image, setImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdComplaintId, setCreatedComplaintId] = useState(null);
+  const [imageUploaded, setImageUploaded] = useState(false);
+  const [creationOutcomeUnknown, setCreationOutcomeUnknown] = useState(false);
+  const submissionInProgress = useRef(false);
 
   // Simple step validation helpers
   const isDetailsValid = () => {
@@ -34,6 +40,7 @@ export default function CreateComplaint() {
   };
 
   const handleNextStep = () => {
+    if (createdComplaintId || creationOutcomeUnknown) return;
     setError("");
     if (step === 1 && !isDetailsValid()) {
       setError("Please check your inputs. Title must be at least 4 characters and description must be at least 10 characters.");
@@ -43,20 +50,54 @@ export default function CreateComplaint() {
   };
 
   const handlePrevStep = () => {
+    if (createdComplaintId || creationOutcomeUnknown) return;
     setError("");
     setStep((prev) => Math.max(prev - 1, 1));
   };
 
   async function submit(e) {
     if (e) e.preventDefault();
+    if (submissionInProgress.current || creationOutcomeUnknown) return;
+    submissionInProgress.current = true;
     setError("");
     setIsSubmitting(true);
+    let complaintId = createdComplaintId;
     try {
-      await api.post("/complaints", form);
+      if (!complaintId) {
+        const created = await api.post("/complaints", form);
+        complaintId = created.data?.id;
+        if (!complaintId) {
+          setCreationOutcomeUnknown(true);
+          setError("The complaint response did not include an ID. Check My Complaints before retrying to avoid creating a duplicate.");
+          return;
+        }
+        setCreatedComplaintId(complaintId);
+      }
+
+      if (image && !imageUploaded) {
+        const payload = new FormData();
+        payload.append("file", image);
+        await api.post(`/complaints/${complaintId}/attachments`, payload, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        setImageUploaded(true);
+      }
+
       navigate("/student/complaints");
     } catch (err) {
-      setError(err.response?.data?.detail || "Could not save your complaint. Please try again.");
+      const detail = err.response?.data?.detail || "Please try again.";
+      if (complaintId && image && !imageUploaded) {
+        setError(`Your complaint was submitted, but its photo was not saved. ${detail} Retry the photo upload or continue without it.`);
+      } else if (complaintId) {
+        setError("Your complaint was submitted. Check My Complaints before trying again.");
+      } else if (!err.response || err.response.status >= 500) {
+        setCreationOutcomeUnknown(true);
+        setError("We could not confirm whether your complaint was saved. Check My Complaints before retrying to avoid creating a duplicate.");
+      } else {
+        setError(detail === "Please try again." ? "Could not save your complaint. Please try again." : detail);
+      }
     } finally {
+      submissionInProgress.current = false;
       setIsSubmitting(false);
     }
   }
@@ -88,6 +129,7 @@ export default function CreateComplaint() {
               <div 
                 key={s.num} 
                 onClick={() => {
+                  if (createdComplaintId || creationOutcomeUnknown) return;
                   if (s.num < step) {
                     setStep(s.num);
                   } else if (s.num === 2 && isDetailsValid()) {
@@ -223,7 +265,7 @@ export default function CreateComplaint() {
           </div>
         )}
 
-        {/* STEP 2: EVIDENCE — attachment support planned for a future release */}
+        {/* STEP 2: OPTIONAL EVIDENCE */}
         {step === 2 && (
           <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between">
@@ -232,25 +274,34 @@ export default function CreateComplaint() {
             </div>
 
             <p className="text-xs text-slate-500 leading-relaxed font-semibold">
-              Attach receipts, screenshots, timetable logs, or correspondence records to bolster your grievance. Attachment support is coming in a future release.
+              A photo is optional. If available, an image or screenshot may help explain the issue. Images are visible only to users authorized to view this grievance.
             </p>
-
-            {/* Planned feature notice — clearly by design, not an error */}
-            <div className="border border-slate-200 rounded-3xl p-8 flex flex-col items-center justify-center gap-4 text-center bg-slate-50/40">
-              <div className="h-12 w-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400">
-                <Paperclip className="h-6 w-6" />
-              </div>
-              <div>
-                <p className="text-sm font-extrabold text-slate-700">Attachments not yet available</p>
-                <p className="text-xs text-slate-400 font-semibold mt-1 max-w-xs mx-auto leading-relaxed">
-                  Evidence upload is planned for a future release. You can proceed without attachments — your written description will be reviewed by the assigned staff member.
-                </p>
-              </div>
-              <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-2.5">
-                <Info className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                <span className="text-[11px] text-amber-700 font-bold">Supports PDF, PNG, JPG — coming soon</span>
-              </div>
-            </div>
+            <label htmlFor="evidence-image" className="border-2 border-dashed border-emerald-200 hover:border-emerald-400 rounded-3xl p-8 flex flex-col items-center justify-center gap-3 text-center bg-emerald-50/30 cursor-pointer transition-colors">
+              {imagePreview ? <img src={imagePreview} alt="Evidence preview" className="max-h-64 max-w-full rounded-2xl object-contain shadow-sm" /> : <div className="h-14 w-14 bg-white border border-emerald-100 rounded-2xl flex items-center justify-center text-emerald-800"><Paperclip className="h-6 w-6" /></div>}
+              <span className="text-sm font-extrabold text-slate-800">{image ? image.name : "Choose an image to upload"}</span>
+              <span className="text-xs text-slate-500">JPG, PNG, WEBP, or GIF · Up to 5 MB · Optional</span>
+              <input
+                id="evidence-image"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                disabled={Boolean(createdComplaintId || creationOutcomeUnknown)}
+                onChange={(event) => {
+                  const selected = event.target.files?.[0];
+                  if (!selected) return;
+                  if (selected.size > 5 * 1024 * 1024) {
+                    setError("Image must be smaller than 5 MB.");
+                    event.target.value = "";
+                    return;
+                  }
+                  setError("");
+                  setImage(selected);
+                  setImagePreview(URL.createObjectURL(selected));
+                }}
+              />
+            </label>
+            {image && !createdComplaintId && !creationOutcomeUnknown && <button type="button" onClick={() => { setImage(null); setImagePreview(""); }} className="self-center text-xs font-bold text-rose-600 hover:text-rose-700">Remove selected image</button>}
+            <div className="flex items-start gap-2 rounded-xl bg-slate-50 border border-slate-100 p-3 text-[11px] text-slate-500"><Info className="h-4 w-4 shrink-0 text-emerald-700" />Avoid uploading images that expose passwords or unrelated students' private information.</div>
           </div>
         )}
 
@@ -290,7 +341,7 @@ export default function CreateComplaint() {
 
               <div className="flex flex-col gap-1.5 md:col-span-2 border-t border-slate-100 pt-3">
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Attachments</span>
-                <span className="text-[11px] text-slate-400 font-semibold italic">No attachments — evidence upload coming in a future release.</span>
+                <span className="text-[11px] text-slate-600 font-semibold">{image ? `Image selected: ${image.name}` : "No image attached"}</span>
               </div>
             </div>
 
@@ -323,7 +374,8 @@ export default function CreateComplaint() {
           {step > 1 ? (
             <button
               onClick={handlePrevStep}
-              className="flex items-center gap-2 text-slate-500 hover:text-slate-800 text-xs font-bold px-4 py-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all cursor-pointer"
+              disabled={Boolean(createdComplaintId || creationOutcomeUnknown)}
+              className="flex items-center gap-2 text-slate-500 hover:text-slate-800 text-xs font-bold px-4 py-2 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
             >
               <ArrowLeft className="h-4 w-4" />
               Previous
@@ -341,14 +393,36 @@ export default function CreateComplaint() {
               <ArrowRight className="h-4 w-4" />
             </button>
           ) : (
-            <button
-              onClick={submit}
-              disabled={isSubmitting}
-              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 active:scale-98 text-white text-xs font-extrabold px-6 py-3.5 rounded-xl transition-all shadow-sm cursor-pointer ml-auto"
-            >
-              {isSubmitting ? "Submitting..." : "Submit Grievance"}
-              <CheckCircle2 className="h-4 w-4" />
-            </button>
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+              {creationOutcomeUnknown && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/student/complaints")}
+                  disabled={isSubmitting}
+                  className="text-xs font-bold text-slate-600 hover:text-slate-800 disabled:text-slate-400"
+                >
+                  Check My Complaints
+                </button>
+              )}
+              {createdComplaintId && image && (
+                <button
+                  type="button"
+                  onClick={() => navigate("/student/complaints")}
+                  disabled={isSubmitting}
+                  className="text-xs font-bold text-slate-600 hover:text-slate-800 disabled:text-slate-400"
+                >
+                  Continue without photo
+                </button>
+              )}
+              <button
+                onClick={submit}
+                disabled={isSubmitting || creationOutcomeUnknown}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 active:scale-98 text-white text-xs font-extrabold px-6 py-3.5 rounded-xl transition-all shadow-sm cursor-pointer"
+              >
+                {isSubmitting ? "Submitting..." : createdComplaintId && image && !imageUploaded ? "Retry photo upload" : "Submit Grievance"}
+                <CheckCircle2 className="h-4 w-4" />
+              </button>
+            </div>
           )}
         </div>
 

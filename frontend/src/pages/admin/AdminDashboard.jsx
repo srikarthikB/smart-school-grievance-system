@@ -57,9 +57,11 @@ export default function AdminDashboard() {
   const stats = useMemo(() => {
     const total = complaints.length;
     const resolved = complaints.filter((c) => c.status === "Resolved").length;
-    const Submitted = complaints.filter((c) => c.status !== "Resolved" && c.status !== "Rejected").length;
+    const active = complaints.filter((c) => c.status !== "Resolved" && c.status !== "Rejected").length;
     const rate = total ? Math.round((resolved / total) * 100) : 0;
-    const highPriority = complaints.filter((c) => c.priority === "High" && c.status !== "Resolved").length;
+    const highPriority = complaints.filter(
+      (c) => c.priority === "High" && c.status !== "Resolved" && c.status !== "Rejected",
+    ).length;
     const resolvedDurations = complaints
       .filter((c) => c.status === "Resolved" && c.created_at && c.updated_at)
       .map((c) => new Date(c.updated_at).getTime() - new Date(c.created_at).getTime())
@@ -71,7 +73,7 @@ export default function AdminDashboard() {
     return {
       total,
       resolved,
-      Submitted,
+      active,
       immediate: highPriority,
       rate,
       avgResolution,
@@ -203,13 +205,13 @@ export default function AdminDashboard() {
         {/* Card 2: Submitted Grievances */}
         <div className="bg-white rounded-3xl border border-slate-200/60 p-6 flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:border-slate-300/85 transition-all duration-300">
           <div className="flex items-center justify-between gap-4">
-            <span className="text-[11px] text-slate-400 font-extrabold uppercase tracking-wider block">Submitted Grievances</span>
+            <span className="text-[11px] text-slate-400 font-extrabold uppercase tracking-wider block">Active Grievances</span>
             <div className="h-8 w-8 rounded-xl bg-rose-50 text-rose-700 flex items-center justify-center border border-rose-100/50 group-hover:bg-rose-100/40 transition-colors">
               <ClipboardList className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-4">
-            <p className="text-3xl font-black tracking-tight text-slate-800">{stats.Submitted}</p>
+            <p className="text-3xl font-black tracking-tight text-slate-800">{stats.active}</p>
             <div className="flex items-center gap-1.5 mt-2.5 text-[10px] text-rose-600 font-black">
               <AlertCircle className="h-3 w-3" />
               <span>{stats.immediate} REQUIRING IMMEDIATE ATTENTION</span>
@@ -435,6 +437,10 @@ export default function AdminDashboard() {
                     badgeStyle = "bg-rose-50 text-rose-800 border-rose-150 font-bold";
                   } else if (c.status === "Resolved") {
                     badgeStyle = "bg-emerald-50 text-emerald-800 border-emerald-150 font-bold";
+                  } else if (c.status === "Awaiting Verification") {
+                    badgeStyle = "bg-amber-50 text-amber-900 border-amber-150 font-bold";
+                  } else if (c.status === "Rejected") {
+                    badgeStyle = "bg-rose-50 text-rose-800 border-rose-150 font-bold";
                   } else if (c.status === "In Progress" || c.status === "Under Review") {
                     badgeStyle = "bg-amber-50 text-amber-800 border-amber-150 font-bold";
                   }
@@ -509,4 +515,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-
