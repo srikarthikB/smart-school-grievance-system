@@ -1,13 +1,13 @@
 """Add user account deactivation status.
 
 Revision ID: 0005_user_deactivation
-Revises: 0004_repair_verification_workflow
+Revises: 0004_repair_verification
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "0005_user_deactivation"
-down_revision = "0004_repair_verification_workflow"
+down_revision = "0004_repair_verification"
 branch_labels = None
 depends_on = None
 

@@ -1,12 +1,12 @@
 """Add repair attempts and verification workflow audit fields.
 
-Revision ID: 0004_repair_verification_workflow
+Revision ID: 0004_repair_verification
 Revises: 0003_user_token_version
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0004_repair_verification_workflow"
+revision = "0004_repair_verification"
 down_revision = "0003_user_token_version"
 branch_labels = None
 depends_on = None

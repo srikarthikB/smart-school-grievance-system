@@ -1,13 +1,13 @@
 """Add database-backed evidence images, complaint timeline, and notifications.
 
-Revision ID: 0002_evidence_notifications_timeline
+Revision ID: 0002_evidence_notify_timeline
 Revises: 0001_initial_schema
 Create Date: 2026-10-17
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0002_evidence_notifications_timeline"
+revision = "0002_evidence_notify_timeline"
 down_revision = "0001_initial_schema"
 branch_labels = None
 depends_on = None

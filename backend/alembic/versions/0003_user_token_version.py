@@ -1,14 +1,14 @@
 """Add per-user token versioning.
 
 Revision ID: 0003_user_token_version
-Revises: 0002_evidence_notifications_timeline
+Revises: 0002_evidence_notify_timeline
 Create Date: 2026-10-17
 """
 from alembic import op
 import sqlalchemy as sa
 
 revision = "0003_user_token_version"
-down_revision = "0002_evidence_notifications_timeline"
+down_revision = "0002_evidence_notify_timeline"
 branch_labels = None
 depends_on = None
 
