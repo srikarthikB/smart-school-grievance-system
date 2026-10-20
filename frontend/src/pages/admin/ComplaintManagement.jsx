@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/client";
+import ComplaintStatusBadge from "../../components/ComplaintStatusBadge.jsx";
 import { 
   Search, 
   X, 
@@ -22,10 +23,18 @@ const GENERIC_ADMIN_STATUS_TRANSITIONS = {
   "Under Review": ["In Progress", "Rejected"],
   "In Progress": ["Under Review", "Rejected"],
 };
+const ASSIGNMENT_LOCKED_STATUSES = new Set([
+  "Awaiting Verification",
+  "Resolved",
+  "Rejected",
+]);
 
 export default function ComplaintManagement() {
   const [complaints, setComplaints] = useState([]);
   const [staff, setStaff] = useState([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [savingState, setSavingState] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -68,25 +77,26 @@ export default function ComplaintManagement() {
   }
 
   function load() {
-    // Fetch complaints and users in parallel.
-    // The backend /users endpoint lists all users; we filter to staff client-side.
-    // If your backend exposes a dedicated /users/staff endpoint, use that instead.
+    setLoadingData(true);
+    setLoadError("");
+    // The admin-only /users endpoint lists all users; keep only active staff selectable.
     Promise.all([api.get("/complaints"), api.get("/users")])
       .then(([complaintsRes, usersRes]) => {
         setComplaints(complaintsRes.data || []);
         const allUsers = usersRes.data || [];
         // Support both { role: "staff" } and { role: "Staff" }
-        setStaff(allUsers.filter((u) => String(u.role || "").toLowerCase() === "staff"));
+        setStaff(allUsers.filter((u) => (
+          String(u.role || "").toLowerCase() === "staff" && u.is_active !== false
+        )));
         if (complaintsRes.data && complaintsRes.data.length > 0 && !selectedId) {
           setSelectedId(complaintsRes.data[0].id);
         }
       })
       .catch((err) => {
         console.error("Failed to load complaint management", err);
-        setComplaints([]);
-        setStaff([]);
-        setErrorMessage(err.response?.data?.detail || "Could not load complaint management data.");
-      });
+        setLoadError(err.response?.data?.detail || "Could not load complaint management data.");
+      })
+      .finally(() => setLoadingData(false));
   }
 
   useEffect(() => {
@@ -97,6 +107,12 @@ export default function ComplaintManagement() {
     if (!selectedId) return null;
     return complaints.find(c => c.id === selectedId) || null;
   }, [complaints, selectedId]);
+  const assignmentChanged = Boolean(activeComplaint)
+    && String(activeComplaint.assigned_to || "") !== drawerStaffId;
+  const currentAssigneeUnavailable = Boolean(activeComplaint?.assigned_to)
+    && !staff.some((member) => member.id === activeComplaint.assigned_to);
+  const assignmentLocked = Boolean(activeComplaint)
+    && ASSIGNMENT_LOCKED_STATUSES.has(activeComplaint.status);
 
   useEffect(() => {
     if (activeComplaint) {
@@ -112,7 +128,7 @@ export default function ComplaintManagement() {
   }, [selectedId]);
 
   async function handleUpdateGrievanceState() {
-    if (!activeComplaint) return;
+    if (!activeComplaint || savingState) return;
     setSuccessMessage("");
     setErrorMessage("");
     if (!drawerStaffId && activeComplaint.assigned_to) {
@@ -137,6 +153,7 @@ export default function ComplaintManagement() {
       return;
     }
 
+    setSavingState(true);
     let assignmentSucceeded = false;
     try {
       let statusAfterAssignment = activeComplaint.status;
@@ -171,6 +188,8 @@ export default function ComplaintManagement() {
         ? `Staff assignment succeeded, but the status update failed: ${detail}`
         : detail);
       if (assignmentSucceeded) load();
+    } finally {
+      setSavingState(false);
     }
   }
 
@@ -271,6 +290,24 @@ export default function ComplaintManagement() {
         <div className="bg-rose-50 border border-rose-100 rounded-2xl p-4 flex gap-3 text-rose-800 text-xs font-semibold">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <p>{errorMessage}</p>
+        </div>
+      )}
+      {loadingData && (
+        <p role="status" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-semibold text-slate-600">
+          Loading complaints and staff…
+        </p>
+      )}
+      {loadError && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between">
+          <p className="font-medium">{loadError}</p>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loadingData}
+            className="shrink-0 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-800 hover:bg-rose-50 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0c3127]"
+          >
+            {loadingData ? "Retrying…" : "Retry"}
+          </button>
         </div>
       )}
 
@@ -407,7 +444,13 @@ export default function ComplaintManagement() {
                   {filteredComplaints.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-5 py-12 text-center text-xs text-slate-400 font-semibold">
-                        No complaints match your current filters.
+                        {loadError
+                          ? "Complaint data could not be loaded."
+                          : loadingData
+                          ? "Loading complaints…"
+                          : complaints.length === 0
+                            ? "No complaints are available."
+                            : "No complaints match your current filters."}
                       </td>
                     </tr>
                   ) : filteredComplaints.map((c) => {
@@ -418,18 +461,6 @@ export default function ComplaintManagement() {
                       priorityBadge = "bg-rose-50 text-rose-800 border-rose-150 font-black uppercase";
                     } else if (c.priority === "Medium") {
                       priorityBadge = "bg-amber-50 text-amber-800 border-amber-150 font-black uppercase";
-                    }
-
-                    // Fixed: removed duplicate "In Progress" case; each status has one style
-                    let statusBadge = "bg-slate-100 text-slate-700 border-slate-200";
-                    if (c.status === "In Progress") {
-                      statusBadge = "bg-red-50 text-red-800 border-red-150 font-black";
-                    } else if (c.status === "Under Review") {
-                      statusBadge = "bg-indigo-50 text-indigo-800 border-indigo-150 font-black";
-                    } else if (c.status === "Resolved") {
-                      statusBadge = "bg-[#064e3b] text-emerald-100 border-transparent font-black";
-                    } else if (c.status === "Rejected") {
-                      statusBadge = "bg-slate-200 text-slate-700 border-slate-300 font-black";
                     }
 
                     return (
@@ -455,9 +486,7 @@ export default function ComplaintManagement() {
                           </span>
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap">
-                          <span className={`inline-flex items-center text-[9px] tracking-wider px-2.5 py-0.5 rounded-full border uppercase ${statusBadge}`}>
-                            {c.status || "Submitted"}
-                          </span>
+                          <ComplaintStatusBadge status={c.status} />
                         </td>
                         <td className="px-5 py-4 whitespace-nowrap text-xs text-slate-600 font-semibold">
                           {c.assignee?.name || <span className="text-slate-400 italic">Unassigned</span>}
@@ -499,8 +528,10 @@ export default function ComplaintManagement() {
                 </h3>
               </div>
               <button 
+                type="button"
+                aria-label="Close complaint details"
                 onClick={() => setSelectedId(null)}
-                className="p-1.5 hover:bg-white/10 rounded-xl text-white transition-all cursor-pointer focus:outline-none"
+                className="p-1.5 hover:bg-white/10 rounded-xl text-white transition-all cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 title="Close Side Drawer"
               >
                 <X className="h-5 w-5" />
@@ -533,40 +564,73 @@ export default function ComplaintManagement() {
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Assign Staff</label>
+                  <label htmlFor="complaint-assignee" className="text-[9px] font-black uppercase text-slate-400 tracking-wider">Assign Staff</label>
                   <select 
+                    id="complaint-assignee"
                     value={drawerStaffId} 
                     onChange={(e) => setDrawerStaffId(e.target.value)}
+                    disabled={loadingData || loadError || savingState || assignmentLocked || (staff.length === 0 && !currentAssigneeUnavailable)}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-700 cursor-pointer"
                   >
                     <option value="">Unassigned</option>
+                    {currentAssigneeUnavailable && (
+                      <option value={String(activeComplaint.assigned_to)} disabled>
+                        {activeComplaint.assignee?.name
+                          ? `${activeComplaint.assignee.name} (inactive or unavailable)`
+                          : `Current assignee unavailable (#${activeComplaint.assigned_to})`}
+                      </option>
+                    )}
                     {staff.map(st => (
-                      <option key={st.id} value={st.id}>{st.name}</option>
+                      <option key={st.id} value={st.id}>
+                        {st.name}{st.department ? ` · ${st.department}` : ""}
+                      </option>
                     ))}
                   </select>
+                  {staff.length === 0 && !currentAssigneeUnavailable && !loadingData && !loadError && (
+                    <p className="text-[10px] leading-relaxed text-amber-800">
+                      No active staff accounts are available for assignment.
+                    </p>
+                  )}
+                  {currentAssigneeUnavailable && !loadError && (
+                    <p className="text-[10px] leading-relaxed text-amber-800">
+                      The current assignee is inactive or unavailable. Select an active staff member to reassign.
+                    </p>
+                  )}
+                  {assignmentLocked && (
+                    <p className="text-[10px] leading-relaxed text-amber-800">
+                      Assignment cannot be changed while this complaint is {activeComplaint.status.toLowerCase()}.
+                    </p>
+                  )}
                 </div>
               </div>
 
               {/* Action feedback */}
               <div className="space-y-2.5">
                 {successMessage && (
-                  <p className="text-[11px] font-bold text-emerald-600 flex items-center justify-center gap-1.5 bg-emerald-50 border border-emerald-100 p-2 rounded-lg">
+                  <p role="status" aria-live="polite" className="text-[11px] font-bold text-emerald-600 flex items-center justify-center gap-1.5 bg-emerald-50 border border-emerald-100 p-2 rounded-lg">
                     <CheckCircle2 className="h-4 w-4" />
                     {successMessage}
                   </p>
                 )}
                 {errorMessage && (
-                  <p className="text-[11px] font-bold text-rose-600 flex items-center justify-center gap-1.5 bg-rose-50 border border-rose-100 p-2 rounded-lg">
+                  <p role="alert" aria-live="assertive" className="text-[11px] font-bold text-rose-600 flex items-center justify-center gap-1.5 bg-rose-50 border border-rose-100 p-2 rounded-lg">
                     <AlertCircle className="h-4 w-4" />
                     {errorMessage}
                   </p>
                 )}
                 
                 <button 
+                  type="button"
                   onClick={handleUpdateGrievanceState}
-                  className="w-full bg-[#0c3127] hover:bg-[#0f4033] text-white text-xs font-black py-3 rounded-xl tracking-wide uppercase cursor-pointer shadow-xs active:scale-98 transition-all"
+                  disabled={savingState || loadingData || loadError}
+                  aria-busy={savingState}
+                  className="w-full bg-[#0c3127] hover:bg-[#0f4033] disabled:cursor-wait disabled:opacity-60 text-white text-xs font-black py-3 rounded-xl tracking-wide uppercase cursor-pointer shadow-xs active:scale-98 transition-all"
                 >
-                  Update Grievance State
+                  {savingState
+                    ? "Saving…"
+                    : assignmentChanged
+                      ? "Save Assignment & Status"
+                      : "Update Grievance State"}
                 </button>
               </div>
 

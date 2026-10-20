@@ -18,7 +18,6 @@ class Settings(BaseSettings):
         alias="BACKEND_CORS_ORIGINS",
     )
     verification_reminder_hours: int = Field(24, ge=1, alias="VERIFICATION_REMINDER_HOURS")
-    verification_review_hours: int = Field(72, ge=1, alias="VERIFICATION_REVIEW_HOURS")
 
     model_config = SettingsConfigDict(env_file=BACKEND_ENV_FILE, extra="ignore")
 

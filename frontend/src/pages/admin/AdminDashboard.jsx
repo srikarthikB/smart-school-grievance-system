@@ -2,13 +2,13 @@
 import { Link } from "react-router-dom";
 import api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext.jsx";
+import ComplaintStatusBadge from "../../components/ComplaintStatusBadge.jsx";
 import { 
   Clock, 
   CheckCircle2, 
   BarChart3, 
   ClipboardList, 
   Search, 
-  Bell, 
   Settings, 
   ChevronRight, 
   Eye, 
@@ -30,9 +30,11 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [trendTab, setTrendTab] = useState("Weekly");
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   function load() {
     setLoading(true);
+    setLoadError("");
     Promise.all([
       api.get("/complaints"),
       api.get("/users"),
@@ -43,8 +45,7 @@ export default function AdminDashboard() {
       })
       .catch((err) => {
         console.error("Failed to load admin dashboard", err);
-        setComplaints([]);
-        setUsers([]);
+        setLoadError(err.response?.data?.detail || "Could not load dashboard data. Please try again.");
       })
       .finally(() => setLoading(false));
   }
@@ -93,6 +94,10 @@ export default function AdminDashboard() {
     const max = Math.max(...counts.map((item) => item.count), 1);
     return counts.map((item) => ({ ...item, height: `${(item.count / max) * 100}%`, active: item.count === max && max > 0 }));
   }, [complaints]);
+  const weeklyScaleMax = Math.max(...weeklyBuckets.map((item) => item.count), 1);
+  const weeklyAxisTicks = weeklyScaleMax > 1
+    ? [weeklyScaleMax, Math.ceil(weeklyScaleMax / 2), 0]
+    : [weeklyScaleMax, 0];
 
   const categoryBuckets = useMemo(() => {
     const counts = complaints.reduce((acc, complaint) => {
@@ -130,10 +135,10 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-8 text-left pb-16">
+    <div className="space-y-6 text-left pb-12 sm:space-y-7">
       
       {/* Top Search bar, notifications and admin identity panel */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
         {/* Search Input Widget */}
         <div className="relative w-full max-w-md">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
@@ -142,19 +147,21 @@ export default function AdminDashboard() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search grievance records, students, or staff..."
-            className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-11 pr-4 py-3 text-xs font-semibold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all shadow-3xs"
+            className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0c3127] transition-all shadow-sm"
           />
         </div>
 
         {/* Info actions and Administrator Identity label */}
         <div className="flex items-center justify-end gap-5">
-          <button className="relative p-2 text-slate-400 hover:text-emerald-700 hover:bg-slate-50 rounded-xl transition-all cursor-pointer">
-            <Bell className="h-4.5 w-4.5" />
-            <span className="absolute top-1 right-1 h-1.5 w-1.5 bg-rose-500 rounded-full" />
-          </button>
-          
-          <button className="p-2 text-slate-400 hover:text-emerald-700 hover:bg-slate-50 rounded-xl transition-all cursor-pointer">
-            <Settings className="h-4.5 w-4.5" />
+          <button
+            type="button"
+            disabled
+            aria-label="Admin settings unavailable"
+            title="Admin settings are not available."
+            className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-xl p-2 text-slate-400 opacity-70"
+          >
+            <Settings aria-hidden="true" className="h-4.5 w-4.5" />
+            <span className="text-[10px] font-bold">Unavailable</span>
           </button>
 
           <div className="h-6 w-[1.5px] bg-slate-200 hidden sm:block" />
@@ -176,14 +183,35 @@ export default function AdminDashboard() {
 
       {/* Hero Welcome Greetings Section */}
       <div className="space-y-1">
-        <h2 className="text-[#0c3127] text-2xl sm:text-3xl font-black tracking-tight">System Overview</h2>
+        <h1 className="text-[#0c3127] text-2xl sm:text-3xl font-black tracking-tight">System Overview</h1>
         <p className="text-xs sm:text-sm text-slate-500 font-semibold">
           Manage and resolve institutional grievances effectively.
         </p>
       </div>
 
+      {loading && (
+        <p role="status" className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-600">
+          Loading dashboard data…
+        </p>
+      )}
+      {loadError && (
+        <div role="alert" className="flex flex-col gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 sm:flex-row sm:items-center sm:justify-between">
+          <p className="font-medium">{loadError}</p>
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="shrink-0 rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-bold text-rose-800 hover:bg-rose-50 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0c3127]"
+          >
+            {loading ? "Retrying…" : "Retry"}
+          </button>
+        </div>
+      )}
+
+      {!loading && !loadError && (
+        <>
       {/* Grid of 4 Statistics overview cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-5">
         
         {/* Card 1: Avg. Resolution */}
         <div className="bg-white rounded-3xl border border-slate-200/60 p-6 flex flex-col justify-between shadow-2xs relative overflow-hidden group hover:border-slate-300/85 transition-all duration-300">
@@ -269,7 +297,7 @@ export default function AdminDashboard() {
         
         {/* Left trends graph panel */}
         <div className="lg:col-span-8 bg-white rounded-3xl border border-slate-200/60 p-6 sm:p-8 flex flex-col gap-6 shadow-2xs">
-          <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="flex flex-col items-start justify-between gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-emerald-800" />
               <strong className="text-base text-slate-800 font-black">Grievance Trends</strong>
@@ -294,31 +322,36 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Simple custom vector bar graph representing Monday to Sunday */}
-          <div className="relative pt-6 h-56 flex flex-col justify-between">
-            <div className="absolute inset-0 flex flex-col justify-between py-1 text-[9px] text-slate-350 font-bold tracking-widest uppercase pointer-events-none">
-              <div className="border-b border-dashed border-slate-100 w-full pb-1">100% Volume Limit</div>
-              <div className="border-b border-dashed border-slate-100 w-full pb-1">75% High Peak</div>
-              <div className="border-b border-dashed border-slate-100 w-full pb-1">50% Average</div>
-              <div className="border-b border-dashed border-slate-100 w-full pb-1">25% Light</div>
-              <div className="w-full" />
+          {/* Custom weekday bar chart with a count axis separate from the plot */}
+          <div className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-x-2 pt-2">
+            <div aria-label="Complaint count scale" className="flex h-36 flex-col justify-between text-right text-[9px] font-semibold leading-none text-slate-500">
+              {weeklyAxisTicks.map((tick, index) => <span key={`${tick}-${index}`}>{tick}</span>)}
             </div>
-
-            {/* Horizontal day columns */}
-            <div className="relative z-10 flex justify-between h-40 items-end px-2">
-              {weeklyBuckets.map((bar, i) => (
-                <div key={i} className="flex flex-col items-center gap-2 group w-full">
-                  <div className="relative w-7 bg-slate-50 border border-slate-100/60 rounded-t-xl h-36 flex items-end overflow-hidden">
-                    <div 
-                      className={`w-full rounded-t-lg transition-all duration-500 group-hover:opacity-90
-                        ${bar.active ? "bg-emerald-800" : "bg-emerald-950/20"}
-                      `}
-                      style={{ height: bar.height }}
-                    />
-                  </div>
-                  <span className="text-[10px] text-slate-400 font-extrabold">{bar.day}</span>
+            <div className="min-w-0">
+              <div className="relative h-36">
+                <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+                  {weeklyAxisTicks.map((tick, index) => (
+                    <span key={`${tick}-${index}`} className="w-full border-t border-dashed border-slate-200" />
+                  ))}
                 </div>
-              ))}
+                <div className="relative z-10 flex h-full items-end justify-around gap-1 px-1">
+                  {weeklyBuckets.map((bar) => (
+                    <div key={bar.day} className="group flex h-full min-w-0 flex-1 items-end justify-center">
+                      <div className="relative flex h-full w-full max-w-7 items-end overflow-hidden rounded-t-xl border border-slate-100/60 bg-slate-50">
+                        <div
+                          className={`w-full rounded-t-lg transition-all duration-500 group-hover:opacity-90 ${bar.active ? "bg-emerald-800" : "bg-emerald-950/20"}`}
+                          style={{ height: bar.height }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-around gap-1 px-1 pt-2">
+                {weeklyBuckets.map((bar) => (
+                  <span key={bar.day} className="min-w-0 flex-1 text-center text-[10px] font-extrabold text-slate-500">{bar.day}</span>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -364,7 +397,10 @@ export default function AdminDashboard() {
                 <div className="space-y-1">
                   <h4 className="text-xs font-extrabold text-slate-800">{complaint.title}</h4>
                   <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-                    {complaint.status || "Submitted"} Â· {complaint.category || "Uncategorized"}
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      <ComplaintStatusBadge status={complaint.status} />
+                      <span>· {complaint.category || "Uncategorized"}</span>
+                    </span>
                   </p>
                 </div>
                 <div className="flex items-center justify-end border-t border-slate-100/60 pt-2.5 mt-1">
@@ -414,8 +450,12 @@ export default function AdminDashboard() {
               <Search className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-800">No matching grievances found</p>
-              <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Try searching for keywords or a different ID.</p>
+              <p className="text-xs font-bold text-slate-800">
+                {complaints.length === 0 ? "No grievances yet" : "No matching grievances found"}
+              </p>
+              <p className="text-[11px] text-slate-500 font-semibold mt-0.5">
+                {complaints.length === 0 ? "New submissions will appear here." : "Try searching for keywords or a different ID."}
+              </p>
             </div>
           </div>
         ) : (
@@ -432,19 +472,6 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredComplaints.slice(0, 5).map((c) => {
-                  let badgeStyle = "bg-slate-50 text-slate-700 border-slate-200";
-                  if (c.status === "In Progress" || c.status === "High") {
-                    badgeStyle = "bg-rose-50 text-rose-800 border-rose-150 font-bold";
-                  } else if (c.status === "Resolved") {
-                    badgeStyle = "bg-emerald-50 text-emerald-800 border-emerald-150 font-bold";
-                  } else if (c.status === "Awaiting Verification") {
-                    badgeStyle = "bg-amber-50 text-amber-900 border-amber-150 font-bold";
-                  } else if (c.status === "Rejected") {
-                    badgeStyle = "bg-rose-50 text-rose-800 border-rose-150 font-bold";
-                  } else if (c.status === "In Progress" || c.status === "Under Review") {
-                    badgeStyle = "bg-amber-50 text-amber-800 border-amber-150 font-bold";
-                  }
-
                   return (
                     <tr key={c.id} className="hover:bg-slate-50/30 transition-colors">
                       {/* Case ID and badge */}
@@ -480,9 +507,7 @@ export default function AdminDashboard() {
 
                       {/* Status Badging */}
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border ${badgeStyle}`}>
-                          {c.status || "Submitted"}
-                        </span>
+                        <ComplaintStatusBadge status={c.status} />
                       </td>
 
                       {/* Detail operations buttons */}
@@ -511,6 +536,9 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+        </>
+      )}
 
     </div>
   );

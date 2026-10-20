@@ -1,15 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
 import api from "../../api/client";
+import ComplaintStatusBadge from "../../components/ComplaintStatusBadge.jsx";
 import RepairWorkflow from "../../components/RepairWorkflow.jsx";
 import { formatErrorMessage } from "../../utils/errorMessage.js";
+import { newRequestKey } from "../../utils/requestKey.js";
 
 function formatDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "Time unavailable" : date.toLocaleString();
-}
-
-function newRequestKey() {
-  return crypto.randomUUID();
 }
 
 export default function VerificationReview() {
@@ -17,6 +15,7 @@ export default function VerificationReview() {
   const [selected, setSelected] = useState(null);
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(true);
+  const [queueLoadFailed, setQueueLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -24,6 +23,7 @@ export default function VerificationReview() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setQueueLoadFailed(false);
     setError("");
     let reminderScanError = "";
     try {
@@ -39,6 +39,7 @@ export default function VerificationReview() {
       setSelected((current) => queue.find((item) => item.id === current?.id) || null);
       if (reminderScanError) setError(`Reminder scan failed: ${reminderScanError}`);
     } catch (requestError) {
+      setQueueLoadFailed(true);
       setError(formatErrorMessage(requestError, "Could not load the verification review queue."));
       setItems([]);
       setSelected(null);
@@ -90,44 +91,24 @@ export default function VerificationReview() {
     }
   }
 
-  async function returnForRepair() {
-    if (!selected) return;
-    if (reason.trim().length < 5) {
-      setError("Enter a reason of at least 5 characters before returning the complaint.");
+  async function decideRepair(action) {
+    if (!selected || !selected.overdue) return;
+    if (action === "reject" && reason.trim().length < 5) {
+      setError("Enter a reason of at least 5 characters before rejecting the repair.");
       return;
     }
+    if (action === "approve" && !window.confirm("Approve this repair as an administrator and resolve the complaint?")) return;
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      await api.post(`/complaints/admin/verification/${selected.id}/return`, { reason: reason.trim() });
-      setMessage("Complaint returned to the assigned employee for further repair.");
-      setReason("");
-      await load();
-    } catch (requestError) {
-      setError(formatErrorMessage(requestError, "Could not return the complaint."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function closeAfterNonresponse() {
-    if (!selected) return;
-    if (reason.trim().length < 10) {
-      setError("Enter a reason of at least 10 characters before administrative closure.");
-      return;
-    }
-    if (!window.confirm("This closes the complaint as an administrator decision, not student approval. Continue?")) return;
-
-    setBusy(true);
-    setError("");
-    setMessage("");
-    try {
-      await api.post(`/complaints/admin/verification/${selected.id}/close`, {
-        confirmed: true,
-        reason: reason.trim(),
+      const response = await api.post(`/complaints/admin/verification/${selected.id}/decision`, {
+        action,
+        reason: action === "reject" ? reason.trim() : null,
       });
-      setMessage("Complaint administratively closed after non-response. This was not student approval.");
+      setMessage(response.data?.message || (action === "approve"
+        ? "Repair approved by administrator. The complaint is complete."
+        : "Repair rejected and returned for further work."));
       setReason("");
       await load();
     } catch (requestError) {
@@ -157,6 +138,8 @@ export default function VerificationReview() {
           <h2 className="mb-3 text-sm font-extrabold text-slate-800">Awaiting verification ({items.length})</h2>
           {loading && items.length === 0 ? (
             <p className="py-6 text-center text-xs text-slate-500">Loading review queue...</p>
+          ) : queueLoadFailed ? (
+            <p className="py-6 text-center text-xs font-semibold text-rose-700">The review queue could not be loaded.</p>
           ) : items.length === 0 ? (
             <p className="py-6 text-center text-xs text-slate-500">No complaints are awaiting verification.</p>
           ) : (
@@ -174,7 +157,7 @@ export default function VerificationReview() {
                       Student: {item.creator?.name || "Unknown"} · Staff: {item.assignee?.name || "Unassigned"}
                     </span>
                     <span className={`mt-2 inline-block rounded-full px-2 py-1 text-[10px] font-bold ${item.overdue ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-900"}`}>
-                      {item.overdue ? "Review overdue" : `${item.age_hours} hours awaiting review`}
+                      {item.overdue ? "Admin review available" : `Student review until ${formatDate(item.review_deadline)}`}
                     </span>
                   </button>
                 </li>
@@ -197,13 +180,14 @@ export default function VerificationReview() {
                     <h2 className="mt-1 text-lg font-extrabold text-slate-900">{selected.title}</h2>
                     <p className="mt-2 whitespace-pre-wrap text-xs text-slate-600">{selected.description}</p>
                   </div>
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-[10px] font-bold text-amber-900">{selected.status}</span>
+                  <ComplaintStatusBadge status={selected.status} />
                 </div>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <p className="text-xs text-slate-600"><strong>Student:</strong> {selected.creator?.name || "Unknown"}</p>
                   <p className="text-xs text-slate-600"><strong>Assigned staff:</strong> {selected.assignee?.name || "Unassigned"}</p>
                   <p className="text-xs text-slate-600"><strong>Submitted:</strong> {formatDate(selected.created_at)}</p>
                   <p className="text-xs text-slate-600"><strong>Latest repair:</strong> {selected.latest_repair?.submitted_at ? formatDate(selected.latest_repair.submitted_at) : "None"}</p>
+                  <p className="text-xs text-slate-600"><strong>Student review deadline:</strong> {selected.review_deadline ? formatDate(selected.review_deadline) : "Unavailable"}</p>
                 </div>
               </div>
 
@@ -239,27 +223,34 @@ export default function VerificationReview() {
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-3">
-                <label className="block text-xs font-bold text-slate-700">
-                  Reason (required for either action)
-                  <textarea
-                    value={reason}
-                    onChange={(event) => setReason(event.target.value)}
-                    maxLength={1000}
-                    rows={3}
-                    className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-3 text-xs"
-                  />
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={returnForRepair} disabled={busy} className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
-                    Return to employee for repair
-                  </button>
-                  <button type="button" onClick={closeAfterNonresponse} disabled={busy} className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-800 disabled:opacity-50">
-                    Administratively close after non-response
-                  </button>
-                </div>
-                <p className="text-[10px] text-slate-500">
-                  Closure requires a reason of at least 10 characters and a second confirmation. It is recorded as an administrator decision, never student approval.
-                </p>
+                {selected.overdue ? (
+                  <>
+                    <p className="text-xs font-semibold text-slate-700">Seven full days have elapsed since the latest repair submission. You may approve the repair or reject it and request rework.</p>
+                    <label className="block text-xs font-bold text-slate-700">
+                      Rejection reason (required to request rework)
+                      <textarea
+                        value={reason}
+                        onChange={(event) => setReason(event.target.value)}
+                        minLength={5}
+                        maxLength={1000}
+                        rows={3}
+                        className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-3 text-xs"
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => decideRepair("approve")} disabled={busy} className="rounded-lg bg-emerald-800 px-3 py-2 text-xs font-bold text-white disabled:opacity-50">
+                        Approve repair
+                      </button>
+                      <button type="button" onClick={() => decideRepair("reject")} disabled={busy} className="rounded-lg border border-amber-300 bg-white px-3 py-2 text-xs font-bold text-amber-900 disabled:opacity-50">
+                        Reject repair and request rework
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <p role="status" className="text-xs font-semibold text-amber-900">
+                    Administrator decisions are locked until seven full days after the latest repair submission: {selected.review_deadline ? formatDate(selected.review_deadline) : "deadline unavailable"}.
+                  </p>
+                )}
               </div>
             </>
           )}

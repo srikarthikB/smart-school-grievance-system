@@ -118,6 +118,10 @@ export default function AnalyticsDashboard() {
     const max = Math.max(...counts.map((item) => item.val), 1);
     return counts.map((item) => ({ ...item, height: `${(item.val / max) * 100}%`, active: item.val === max && max > 0 }));
   }, [complaints]);
+  const monthlyScaleMax = Math.max(...monthlyBuckets.map((item) => item.val), 1);
+  const monthlyAxisTicks = monthlyScaleMax > 1
+    ? [monthlyScaleMax, Math.ceil(monthlyScaleMax / 2), 0]
+    : [monthlyScaleMax, 0];
 
   const filteredDepartments = useMemo(() => {
     const rows = categoryBuckets.map((bucket) => {
@@ -307,8 +311,8 @@ export default function AnalyticsDashboard() {
         
         {/* Left column: Monthly Volume bar visualization */}
         <div className="lg:col-span-8 bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 flex flex-col gap-6 shadow-2xs">
-          <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col items-start justify-between gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center">
+            <div className="flex shrink-0 items-center gap-2">
               <BarChart3 className="h-5 w-5 text-emerald-800" />
               <strong className="text-base text-slate-800 font-black">Monthly Grievance Volume</strong>
             </div>
@@ -320,34 +324,38 @@ export default function AnalyticsDashboard() {
             </div>
           </div>
 
-          {/* Monthly visual bars stack representing JAN - DEC */}
-          <div className="flex flex-col justify-between h-56 pt-3 relative">
-            
-            {/* Grid line guidelines */}
-            <div className="absolute inset-0 flex flex-col justify-between py-1 text-[9px] text-slate-300 font-bold tracking-widest uppercase pointer-events-none">
-              <div className="border-b border-dashed border-slate-100/80 w-full" />
-              <div className="border-b border-dashed border-slate-100/80 w-full" />
-              <div className="border-b border-dashed border-slate-100/80 w-full" />
-              <div className="w-full" />
+          {/* Monthly bars with a reserved count axis and aligned calendar labels */}
+          <div className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] gap-x-2 pt-1">
+            <div aria-label="Complaint count scale" className="flex h-36 flex-col justify-between text-right text-[9px] font-semibold leading-none text-slate-500">
+              {monthlyAxisTicks.map((tick, index) => <span key={`${tick}-${index}`}>{tick}</span>)}
             </div>
-
-            {/* Horizontal timeline of calendar bars */}
-            <div className="relative z-10 flex justify-between h-44 items-end px-2 gap-1.5 sm:gap-3">
-              {monthlyBuckets.map((m, i) => (
-                <div key={i} className="flex flex-col items-center gap-1.5 flex-1 group">
-                  <div className="relative w-full max-w-[28px] bg-slate-50/50 border border-slate-100/80 rounded-t-lg h-36 flex items-end overflow-hidden">
-                    <div 
-                      className={`w-full rounded-t-md transition-all duration-500 group-hover:opacity-90 
-                        ${m.active ? "bg-emerald-850" : "bg-[#0c3127]/25"}`}
-                      style={{ height: m.height }}
-                    />
-                  </div>
-                  <span className={`text-[10px] font-black uppercase tracking-wider
-                    ${m.active ? "text-[#0c3127] font-black" : "text-slate-400"}`}>
-                    {m.label}
-                  </span>
+            <div className="min-w-0">
+              <div className="relative h-36">
+                <div aria-hidden="true" className="pointer-events-none absolute inset-0 flex flex-col justify-between">
+                  {monthlyAxisTicks.map((tick, index) => (
+                    <span key={`${tick}-${index}`} className="w-full border-t border-dashed border-slate-200" />
+                  ))}
                 </div>
-              ))}
+                <div className="relative z-10 grid h-full min-w-0 grid-cols-12 items-end gap-1 sm:gap-2">
+                  {monthlyBuckets.map((month) => (
+                    <div key={month.label} className="group flex h-full min-w-0 items-end justify-center">
+                      <div className="relative flex h-full w-full max-w-[28px] items-end overflow-hidden rounded-t-lg border border-slate-100/80 bg-slate-50/50">
+                        <div
+                          className={`w-full rounded-t-md transition-all duration-500 group-hover:opacity-90 ${month.active ? "bg-emerald-850" : "bg-[#0c3127]/25"}`}
+                          style={{ height: month.height }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-2 grid min-w-0 grid-cols-12 gap-1 text-center sm:gap-2">
+                {monthlyBuckets.map((month) => (
+                  <span key={month.label} className={`min-w-0 whitespace-nowrap text-[8px] font-black uppercase leading-tight sm:text-[10px] sm:tracking-wider ${month.active ? "text-[#0c3127]" : "text-slate-500"}`}>
+                    {month.label}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         </div>

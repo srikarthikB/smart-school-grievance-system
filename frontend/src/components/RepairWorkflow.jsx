@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import api from "../api/client";
 import { formatErrorMessage } from "../utils/errorMessage.js";
+import { newRequestKey } from "../utils/requestKey.js";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -10,14 +11,11 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "Time unavailable" : date.toLocaleString();
 }
 
-function newRequestKey() {
-  return crypto.randomUUID();
-}
-
 export default function RepairWorkflow({
   complaintId,
   mode,
   status,
+  compact = false,
   isOwner = false,
   assignedToCurrentUser = false,
   onUpdated,
@@ -32,11 +30,22 @@ export default function RepairWorkflow({
   const [message, setMessage] = useState("");
   const [note, setNote] = useState("");
   const [file, setFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
   const [reason, setReason] = useState("");
   const [requestKey, setRequestKey] = useState(newRequestKey);
   const objectUrls = useRef([]);
   const fileInput = useRef(null);
   const loadGeneration = useRef(0);
+
+  useEffect(() => {
+    if (!file || !ACCEPTED_TYPES.includes(file.type) || file.size > MAX_IMAGE_BYTES) {
+      setPreviewUrl("");
+      return undefined;
+    }
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
 
   const loadRepairs = useCallback(async () => {
     const generation = ++loadGeneration.current;
@@ -192,10 +201,10 @@ export default function RepairWorkflow({
     && hasValidRepairSubmission;
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 space-y-4">
+    <section aria-busy={loading || busy} className={`space-y-4 ${compact ? "rounded-xl border border-slate-200 p-4" : "rounded-2xl border border-slate-200 bg-white p-5"}`}>
       <header>
-        <h3 className="text-sm font-extrabold text-slate-800">Repair evidence and verification</h3>
-        <p className="mt-1 text-[11px] text-slate-500">Every repair attempt and decision remains in the case history.</p>
+        <h3 className="text-sm font-extrabold text-slate-800">{compact ? "Repair evidence" : "Repair evidence and verification"}</h3>
+        {!compact && <p className="mt-1 text-[11px] text-slate-500">Every repair attempt and decision remains in the case history.</p>}
       </header>
 
       {error && (
@@ -216,8 +225,9 @@ export default function RepairWorkflow({
       {message && <p role="status" className="rounded-lg border border-emerald-100 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800">{message}</p>}
 
       {loading ? (
-        <p className="text-xs text-slate-500">Loading repair history...</p>
-      ) : repairs.length === 0 ? (
+        <p role="status" aria-live="polite" className="text-xs text-slate-500">Loading repair history...</p>
+      ) : historyLoadFailed ? null : repairs.length === 0 ? (
+        compact && mode === "staff" ? null :
         <p className="text-xs text-slate-500">No repair submissions yet.</p>
       ) : (
         <ol className="space-y-3">
@@ -225,19 +235,32 @@ export default function RepairWorkflow({
             <li key={attempt.id} className="rounded-xl border border-slate-100 p-4 space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <strong className="text-xs text-slate-800">Repair attempt {index + 1}</strong>
-                <span className="text-[11px] text-slate-500">{formatDate(attempt.submitted_at)}</span>
+                <span className="text-[11px] text-slate-500">Submitted {formatDate(attempt.submitted_at)}</span>
               </div>
+              {mode === "student" && status === "Awaiting Verification" && attempt.id === latestRepair?.id && (
+                <p className="text-[11px] font-semibold text-amber-900">
+                  Review by {attempt.review_deadline ? formatDate(attempt.review_deadline) : "deadline unavailable"}
+                </p>
+              )}
               <p className="whitespace-pre-wrap text-xs text-slate-700">{attempt.note}</p>
               <p className="text-[10px] text-slate-500">Submitted by {attempt.submitted_by?.name || "Staff"}</p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {(attempt.attachments || []).map((attachment) => (
                   <figure key={attachment.id} className="rounded-lg bg-slate-50 p-2">
                     {imageUrls[attachment.id] ? (
-                      <img
-                        src={imageUrls[attachment.id]}
-                        alt={`After-repair evidence: ${attachment.filename}`}
-                        className="max-h-64 w-full rounded-lg object-contain"
-                      />
+                      <a
+                        href={imageUrls[attachment.id]}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Open after-repair evidence image: ${attachment.filename || "repair photo"} in a new tab`}
+                        className="block rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                      >
+                        <img
+                          src={imageUrls[attachment.id]}
+                          alt={`After-repair evidence: ${attachment.filename || "repair photo"}. Open image in a new tab for a larger view.`}
+                          className="max-h-64 w-full rounded-lg object-contain"
+                        />
+                      </a>
                     ) : (
                       <p className="p-4 text-xs text-slate-500">{attachment.filename || "Repair image"} is unavailable.</p>
                     )}
@@ -253,6 +276,16 @@ export default function RepairWorkflow({
       {mode === "student" && isOwner && status === "Awaiting Verification" && !loading && !historyLoadFailed && !canVerify && (
         <p role="status" className="text-xs font-semibold text-amber-800">
           Verification is unavailable because no complete repair submission with loaded photo evidence was found.
+        </p>
+      )}
+
+      {mode === "staff" && !canSubmitRepair && (
+        <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-medium text-amber-900">
+          {!assignedToCurrentUser
+            ? "Repair submission is unavailable because this complaint is not assigned to your account."
+            : status === "Awaiting Verification"
+              ? "Repair submission is unavailable while this complaint is awaiting student verification."
+              : `Repair submission is unavailable for the current status${status ? ` (${status})` : ""}. Staff can submit repair evidence while a complaint is Under Review or In Progress.`}
         </p>
       )}
 
@@ -272,17 +305,25 @@ export default function RepairWorkflow({
             />
           </label>
           <label className="block text-xs font-semibold text-slate-700">
-            After-repair photograph
+            After-repair photo (required)
             <input
               ref={fileInput}
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif"
               required
+              aria-describedby={`repair-photo-requirements-${complaintId}`}
               onChange={(event) => setFile(event.target.files?.[0] || null)}
-              className="mt-1 block w-full text-xs"
+              className="mt-2 block w-full cursor-pointer rounded-lg border border-emerald-800/30 bg-white p-2 text-xs text-slate-700 shadow-sm file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-emerald-800 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white hover:file:bg-emerald-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
             />
+            <span id={`repair-photo-requirements-${complaintId}`} className="mt-1 block text-[10px] font-medium text-slate-500">JPG, PNG, WEBP, or GIF · Maximum 5 MB</span>
           </label>
-          <button disabled={busy} className="rounded-lg bg-emerald-800 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+          {file && (
+            <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="break-all text-xs font-semibold text-slate-700">Selected: {file.name} ({(file.size / (1024 * 1024)).toFixed(2)} MB)</p>
+              {previewUrl && <img src={previewUrl} alt="Preview of selected after-repair photograph" className="max-h-56 w-full rounded-lg object-contain" />}
+            </div>
+          )}
+          <button type="submit" disabled={busy} className="rounded-lg bg-emerald-800 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
             {busy ? "Submitting..." : "Submit for student verification"}
           </button>
         </form>
@@ -316,7 +357,7 @@ export default function RepairWorkflow({
             onClick={() => verifyRepair("still_not_fixed")}
             className="rounded-lg border border-amber-300 px-4 py-2 text-xs font-bold text-amber-900 disabled:opacity-50"
           >
-            Still not fixed - request more repair
+            Reject repair and request rework
           </button>
         </div>
       )}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext.jsx";
 import api from "../api/client";
@@ -29,6 +29,26 @@ export default function AppLayout() {
   const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [notificationsBusy, setNotificationsBusy] = useState(false);
   const [notificationError, setNotificationError] = useState("");
+  const mobileMenuButtonRef = useRef(null);
+  const unreadNotificationCount = notifications.filter((item) => !item.is_read).length;
+
+  function toggleNotifications() {
+    setNotificationsOpen((open) => !open);
+  }
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+
+    function handleMenuKeyDown(event) {
+      if (event.key === "Escape") {
+        setMobileMenuOpen(false);
+        mobileMenuButtonRef.current?.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleMenuKeyDown);
+    return () => window.removeEventListener("keydown", handleMenuKeyDown);
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     let active = true;
@@ -196,8 +216,13 @@ export default function AppLayout() {
         </div>
         
         <button
+          ref={mobileMenuButtonRef}
+          type="button"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-2 text-slate-500 hover:text-emerald-900 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all focus:outline-none"
+          aria-label={mobileMenuOpen ? "Close navigation menu" : "Open navigation menu"}
+          aria-expanded={mobileMenuOpen}
+          aria-controls="primary-navigation"
+          className="p-2 text-slate-500 hover:text-emerald-900 bg-slate-50 hover:bg-slate-100 rounded-lg transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0c3127]"
         >
           {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
@@ -205,11 +230,11 @@ export default function AppLayout() {
 
       {/* Main left sidebar container for desktop layout & mobile overlay drawer */}
       <aside className={`
-        fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-150 flex flex-col justify-between py-7 px-4 transform transition-transform duration-200 ease-in-out
+        fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-slate-200 flex flex-col justify-between py-6 px-3.5 transform transition-transform duration-200 ease-in-out
         md:translate-x-0 md:static md:h-screen md:sticky md:top-0 shrink-0
-        ${mobileMenuOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+        ${mobileMenuOpen ? "translate-x-0 visible" : "-translate-x-full invisible md:translate-x-0 md:visible"}
       `}>
-        <div className="flex flex-col gap-8">
+        <div className="flex flex-col gap-7">
           
           {/* Institutional Branding Block */}
           <div className="hidden md:flex items-center gap-2.5 px-3">
@@ -234,7 +259,7 @@ export default function AppLayout() {
           </div>
 
           {/* Core navigation links */}
-          <nav className="flex flex-col gap-1 px-1">
+          <nav id="primary-navigation" aria-label="Primary navigation" className="flex flex-col gap-1.5 px-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
               
@@ -258,14 +283,15 @@ export default function AppLayout() {
                   to={item.path}
                   onClick={() => setMobileMenuOpen(false)}
                   className={`
-                    flex items-center gap-3 px-4.5 py-3 rounded-xl text-[13px] font-bold transition-all duration-150 text-left border-l-[3px]
+                    flex items-center gap-3 px-3.5 py-3 rounded-xl text-[13px] font-bold transition-all duration-150 text-left border-l-[3px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0c3127]
                     ${isActive 
-                      ? "bg-emerald-50/75 text-[#0c3127] border-l-[#0c3127]" 
-                      : "border-l-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                      ? "bg-emerald-50 text-[#0c3127] border-l-[#0c3127] shadow-sm"
+                      : "border-l-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900"
                     }
                   `}
+                  aria-current={isActive ? "page" : undefined}
                 >
-                  <Icon className={`h-4.5 w-4.5 shrink-0 ${isActive ? "text-[#0c3127]" : "text-slate-400"}`} />
+                  <Icon aria-hidden="true" className={`h-4.5 w-4.5 shrink-0 ${isActive ? "text-[#0c3127]" : "text-slate-400"}`} />
                   <span>{item.label}</span>
                 </Link>
               );
@@ -282,7 +308,7 @@ export default function AppLayout() {
               setMobileMenuOpen(false);
               alert("Contacting the institutional student affairs helpline support network...");
             }}
-            className="flex items-center gap-3.5 px-4.5 py-2.5 rounded-xl text-[13.5px] font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors w-full text-left"
+            className="flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[13.5px] font-bold text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0c3127]"
           >
             <HelpCircle className="h-4.5 w-4.5 text-slate-400 shrink-0" />
             <span>Support</span>
@@ -294,7 +320,7 @@ export default function AppLayout() {
               setMobileMenuOpen(false);
               handleLogout();
             }}
-            className="flex items-center gap-3.5 px-4.5 py-2.5 rounded-xl text-[13px] font-extrabold text-rose-600 hover:bg-rose-50/50 transition-colors w-full text-left"
+            className="flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[13px] font-extrabold text-rose-600 hover:bg-rose-50/50 transition-colors w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0c3127]"
           >
             <LogOut className="h-4.5 w-4.5 text-rose-500 shrink-0" />
             <span>Logout</span>
@@ -307,31 +333,32 @@ export default function AppLayout() {
       {mobileMenuOpen && (
         <div 
           onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
           className="fixed inset-0 bg-slate-900/30 backdrop-blur-xs z-30 md:hidden"
         />
       )}
 
       {/* Primary viewport content display wrapper */}
-      <main className="flex-1 min-w-0 p-5 sm:p-8 md:p-10 overflow-y-auto w-full">
-        <div className="max-w-6xl mx-auto">
+      <main className="flex-1 min-w-0 p-4 sm:p-7 lg:p-9 overflow-y-auto w-full">
+        <div className="max-w-7xl mx-auto">
           <div className="relative mb-5 flex justify-end">
             <button
               type="button"
-              onClick={() => setNotificationsOpen((open) => !open)}
+              onClick={toggleNotifications}
               aria-expanded={notificationsOpen}
-              aria-label={`Notifications${notifications.some((item) => !item.is_read) ? `, ${notifications.filter((item) => !item.is_read).length} unread` : ""}`}
+              aria-controls="notification-center"
+              aria-label={`Notifications${unreadNotificationCount ? `, ${unreadNotificationCount} unread` : ""}`}
               className="relative inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 shadow-sm hover:border-emerald-200 hover:text-emerald-900"
             >
               <Bell className="h-4 w-4" />
               Notifications
-              {notifications.some((item) => !item.is_read) && (
+              {unreadNotificationCount > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-600 px-1 text-[10px] font-black text-white">
-                  {notifications.filter((item) => !item.is_read).length > 99 ? "99+" : notifications.filter((item) => !item.is_read).length}
+                  {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
                 </span>
               )}
             </button>
-            {notificationsOpen && (
-              <div className="absolute right-0 top-12 z-50 w-[min(24rem,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+            <div id="notification-center" hidden={!notificationsOpen} className="absolute right-0 top-12 z-50 w-[min(24rem,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
                 <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                   <span className="text-sm font-extrabold text-slate-800">Notification center</span>
                   <button
@@ -373,8 +400,7 @@ export default function AppLayout() {
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
+            </div>
           </div>
           {notificationError && !notificationsOpen && (
             <p role="alert" className="mb-4 rounded-lg border border-rose-100 bg-rose-50 p-3 text-xs font-semibold text-rose-800">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/client";
+import ComplaintStatusBadge from "../../components/ComplaintStatusBadge.jsx";
 import {
   Search,
   CheckCircle2,
@@ -219,8 +220,6 @@ export default function StaffClosedCases() {
           ) : (
             <div className="flex flex-col gap-4">
               {filtered.map((c) => {
-                const isResolved =
-                  String(c.status || "").toLowerCase() === "resolved";
                 const isSelected = selectedComplaint?.id === c.id;
 
                 return (
@@ -235,15 +234,7 @@ export default function StaffClosedCases() {
                       }`}
                   >
                     <div className="flex items-center justify-between gap-4">
-                      <span
-                        className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg border ${
-                          isResolved
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-100"
-                            : "bg-rose-50 text-rose-700 border-rose-100"
-                        }`}
-                      >
-                        {isResolved ? "Resolved" : "Rejected"}
-                      </span>
+                      <ComplaintStatusBadge status={c.status} />
                       <span className="text-[10px] text-slate-400 font-bold flex items-center gap-1">
                         <Clock className="h-3 w-3" />
                         Closed {displayTime(c.updated_at)}
@@ -318,22 +309,7 @@ export default function StaffClosedCases() {
 
               {/* Outcome badge */}
               <div className="flex items-center gap-3">
-                {String(selectedComplaint.status || "").toLowerCase() ===
-                "resolved" ? (
-                  <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-2.5">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-700" />
-                    <span className="text-xs font-black text-emerald-800 uppercase tracking-wider">
-                      Resolved
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 rounded-xl px-4 py-2.5">
-                    <XCircle className="h-4 w-4 text-rose-600" />
-                    <span className="text-xs font-black text-rose-700 uppercase tracking-wider">
-                      Rejected
-                    </span>
-                  </div>
-                )}
+                <ComplaintStatusBadge status={selectedComplaint.status} />
                 <span className="text-[10px] text-slate-400 font-bold">
                   Closed on {displayTime(selectedComplaint.updated_at)}
                 </span>

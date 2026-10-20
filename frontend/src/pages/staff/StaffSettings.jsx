@@ -29,10 +29,10 @@ function Section({ icon: Icon, title, children }) {
 }
 
 // ── Labelled input ─────────────────────────────────────────────────────────────
-function Field({ label, hint, children }) {
+function Field({ id, label, hint, children }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
+      <label htmlFor={id} className="text-[11px] font-black uppercase text-slate-500 tracking-wider">
         {label}
       </label>
       {children}
@@ -44,14 +44,15 @@ function Field({ label, hint, children }) {
 }
 
 // ── Toggle switch ──────────────────────────────────────────────────────────────
-function Toggle({ checked, onChange }) {
+function Toggle({ checked, onChange, label }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={label}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0c3127] ${
         checked ? "bg-[#0c3127]" : "bg-slate-200"
       }`}
     >
@@ -243,8 +244,9 @@ export default function StaffSettings() {
       <Section icon={User} title="Profile Information">
         <form onSubmit={handleProfileSave} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Full Name">
+            <Field id="staff-profile-name" label="Full Name">
               <input
+                id="staff-profile-name"
                 type="text"
                 value={profileForm.name}
                 onChange={(e) =>
@@ -256,18 +258,19 @@ export default function StaffSettings() {
               />
             </Field>
 
-            <Field label="Email Address" hint="Contact your admin to change your email.">
+            <Field id="staff-profile-email" label="Email Address" hint="Contact your admin to change your email.">
               <input
+                id="staff-profile-email"
                 type="email"
                 value={profileForm.email}
                 readOnly
                 className={disabledClass}
-                tabIndex={-1}
               />
             </Field>
 
-            <Field label="Department">
+            <Field id="staff-profile-department" label="Department">
               <input
+                id="staff-profile-department"
                 type="text"
                 value={profileForm.department}
                 onChange={(e) =>
@@ -278,8 +281,9 @@ export default function StaffSettings() {
               />
             </Field>
 
-            <Field label="Phone / Extension">
+            <Field id="staff-profile-phone" label="Phone / Extension">
               <input
+                id="staff-profile-phone"
                 type="tel"
                 value={profileForm.phone}
                 onChange={(e) =>
@@ -318,9 +322,10 @@ export default function StaffSettings() {
               showKey: "confirm",
             },
           ].map(({ key, label, showKey }) => (
-            <Field key={key} label={label}>
+            <Field id={`staff-password-${key}`} key={key} label={label}>
               <div className="relative">
                 <input
+                  id={`staff-password-${key}`}
                   type={showPw[showKey] ? "text" : "password"}
                   value={pwForm[key]}
                   onChange={(e) =>
@@ -332,11 +337,11 @@ export default function StaffSettings() {
                 />
                 <button
                   type="button"
+                  aria-label={`${showPw[showKey] ? "Hide" : "Show"} ${label.toLowerCase()}`}
                   onClick={() =>
                     setShowPw((p) => ({ ...p, [showKey]: !p[showKey] }))
                   }
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
-                  tabIndex={-1}
                 >
                   {showPw[showKey] ? (
                     <EyeOff className="h-4 w-4" />
@@ -404,6 +409,7 @@ export default function StaffSettings() {
               </div>
               <Toggle
                 checked={notifs[key]}
+                label={label}
                 onChange={(val) => setNotifs((p) => ({ ...p, [key]: val }))}
               />
             </div>

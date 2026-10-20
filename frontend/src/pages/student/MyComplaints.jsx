@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/client";
+import ComplaintStatusBadge from "../../components/ComplaintStatusBadge.jsx";
 import { 
   ClipboardList, 
   Clock, 
@@ -241,19 +242,6 @@ export default function MyComplaints() {
             filteredComplaints.map((c) => {
               const { stepIndex } = getStepState(c.status);
               
-              let badgeColor = "bg-slate-100 text-slate-800";
-              if (c.status === "In Progress") {
-                badgeColor = "bg-rose-50 text-rose-800 border-rose-100/50 border";
-              } else if (c.status === "Under Review") {
-                badgeColor = "bg-emerald-50 text-emerald-800 border-emerald-100/50 border";
-              } else if (c.status === "Awaiting Verification") {
-                badgeColor = "bg-amber-50 text-amber-900 border-amber-100/50 border";
-              } else if (c.status === "Resolved") {
-                badgeColor = "bg-sky-50 text-sky-800 border-sky-100/50 border";
-              } else if (c.status === "Rejected") {
-                badgeColor = "bg-red-50 text-red-800 border-red-100/50 border";
-              }
-
               return (
                 <div 
                   key={c.id} 
@@ -263,9 +251,7 @@ export default function MyComplaints() {
                     <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">
                       #GRV-2026-{String(c.id).padStart(3, "0")}
                     </span>
-                    <span className={`text-[10px] font-bold tracking-wide uppercase px-3 py-1.5 rounded-xl ${badgeColor}`}>
-                      {c.status || "Submitted"}
-                    </span>
+                    <ComplaintStatusBadge status={c.status} />
                   </div>
 
                   <h3 className="text-slate-900 font-extrabold text-lg -mt-2 leading-snug">
@@ -464,19 +450,6 @@ export function ComplaintTable({ complaints, showFeedback }) {
 
       <div className="divide-y divide-slate-100">
         {complaints.map((c) => {
-          let statusBg = "bg-slate-50 text-slate-600 border-slate-200/60";
-          let statusBullet = "bg-slate-400";
-          if (c.status === "Resolved") {
-            statusBg = "bg-emerald-50 text-emerald-700 border-emerald-100";
-            statusBullet = "bg-emerald-500";
-          } else if (c.status === "In Progress" || c.status === "Under Review") {
-            statusBg = "bg-amber-50 text-amber-700 border-amber-100";
-            statusBullet = "bg-amber-500";
-          } else if (c.status === "Rejected") {
-            statusBg = "bg-rose-50 text-rose-700 border-rose-100";
-            statusBullet = "bg-rose-500";
-          }
-
           let priorityColor = "text-slate-500";
           if (c.priority === "High") priorityColor = "text-red-600 font-bold";
           else if (c.priority === "Medium") priorityColor = "text-amber-600 font-bold";
@@ -510,10 +483,7 @@ export function ComplaintTable({ complaints, showFeedback }) {
 
               <div className="col-span-2 mt-3 md:mt-0 text-left">
                 <span className="md:hidden text-[9px] text-slate-400 font-bold uppercase block mb-0.5">Status</span>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide border ${statusBg}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${statusBullet}`} />
-                  {c.status}
-                </span>
+                <ComplaintStatusBadge status={c.status} />
               </div>
 
               <div className="col-span-1 mt-4 md:mt-0 flex gap-2 w-full md:justify-end">

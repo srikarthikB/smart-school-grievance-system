@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import api from "../../api/client";
 import { useAuth } from "../../auth/AuthContext.jsx";
+import ComplaintStatusBadge from "../../components/ComplaintStatusBadge.jsx";
 import { 
   Folder, 
   ClipboardList, 
@@ -295,10 +296,15 @@ export default function StudentDashboard() {
 
             <div className="divide-y divide-slate-100">
               {realActivities.length > 0 ? (
-                realActivities.map((act, index) => {
+                realActivities.map((act) => {
                   const ActIcon = act.icon || Wrench;
                   return (
-                    <div key={`${act.id}-${index}`} className="p-6 flex gap-4 transition-colors hover:bg-slate-50/40">
+                    <Link
+                      key={act.id}
+                      to={`/complaints/${act.id}`}
+                      aria-label={`View status for complaint #${act.id}: ${act.title}`}
+                      className="flex cursor-pointer gap-4 p-6 transition-colors hover:bg-slate-50/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#0c3127]"
+                    >
                       <div className="h-10 w-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center shrink-0 border border-emerald-100/50">
                         <ActIcon className="h-5 w-5" />
                       </div>
@@ -315,18 +321,9 @@ export default function StudentDashboard() {
                           {act.description}
                         </p>
 
-                        {/* Styled Dynamic Badges matching current resolutions */}
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide mt-3.5
-                          ${act.status === "Resolved" 
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-100" 
-                            : "bg-amber-50 text-amber-700 border border-amber-100"
-                          }
-                        `}>
-                          <span className={`h-1.5 w-1.5 rounded-full ${act.status === "Resolved" ? "bg-emerald-500" : "bg-amber-500"}`} />
-                          {act.status}
-                        </span>
+                        <ComplaintStatusBadge status={act.status} className="mt-3.5" />
                       </div>
-                    </div>
+                    </Link>
                   );
                 })
               ) : (

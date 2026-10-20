@@ -1,5 +1,5 @@
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from types import SimpleNamespace
 import unittest
@@ -27,6 +27,7 @@ from app.models import (
 )
 from app.schemas.complaint import AssignComplaintRequest, ComplaintCreate, StatusUpdateRequest
 from app.schemas.repair import (
+    AdminRepairVerificationRequest,
     AdminNonResponseClosureRequest,
     AdminRepairReturnRequest,
     RepairVerificationRequest,
@@ -97,6 +98,17 @@ class RepairWorkflowTests(unittest.TestCase):
             )
         )
 
+    def age_latest_repair(self, complaint, age=timedelta(days=8)):
+        repair = self.db.scalar(
+            select(ComplaintRepairSubmission)
+            .where(ComplaintRepairSubmission.complaint_id == complaint.id)
+            .order_by(ComplaintRepairSubmission.submitted_at.desc(), ComplaintRepairSubmission.id.desc())
+            .limit(1)
+        )
+        repair.submitted_at = datetime.now(timezone.utc) - age
+        self.db.commit()
+        return repair
+
     def test_student_can_submit_complaint_without_an_image(self):
         payload = ComplaintCreate(
             title="Water fountain leak",
@@ -124,6 +136,7 @@ class RepairWorkflowTests(unittest.TestCase):
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["note"], "Replaced the damaged latch.")
         self.assertEqual(len(history[0]["attachments"]), 1)
+        self.assertGreater(history[0]["review_deadline"], complaint_routes.utc_datetime(history[0]["submitted_at"]))
         self.assertTrue(
             self.db.scalar(
                 select(Notification.id).where(
@@ -238,6 +251,35 @@ class RepairWorkflowTests(unittest.TestCase):
         self.db.refresh(complaint)
         self.assertEqual(complaint.status, ComplaintStatus.InProgress)
 
+    def test_oversized_and_unsupported_repair_images_are_rejected(self):
+        complaint = self.make_complaint()
+        oversized = PNG_BYTES + (b"x" * (5 * 1024 * 1024))
+
+        with self.assertRaises(HTTPException) as size_error:
+            self.submit(complaint, file=self.image(data=oversized))
+        self.assertEqual(size_error.exception.status_code, 413)
+
+        with self.assertRaises(HTTPException) as type_error:
+            self.submit(complaint, file=self.image(data=PNG_BYTES, content_type="image/bmp"))
+        self.assertEqual(type_error.exception.status_code, 400)
+        self.assertEqual(complaint_routes.repair_history_payload(self.db, complaint, self.staff), [])
+
+    def test_unrelated_student_cannot_retrieve_repair_photo(self):
+        complaint = self.make_complaint()
+        self.submit(complaint)
+        attachment = self.db.scalar(
+            select(ComplaintAttachment).where(ComplaintAttachment.complaint_id == complaint.id)
+        )
+
+        with self.assertRaises(HTTPException) as raised:
+            complaint_routes.get_complaint_attachment(
+                complaint.id,
+                attachment.id,
+                self.db,
+                self.other_student,
+            )
+        self.assertEqual(raised.exception.status_code, 404)
+
     def test_admin_assignment_requires_existing_staff_role_and_records_event(self):
         complaint = self.make_complaint(unassigned=True)
 
@@ -264,8 +306,70 @@ class RepairWorkflowTests(unittest.TestCase):
             )
         )
 
+        reassigned = complaint_routes.assign_complaint(
+            complaint.id,
+            AssignComplaintRequest(staff_id=self.other_staff.id),
+            self.db,
+            self.admin,
+        )
+        self.assertEqual(reassigned.assigned_to, self.other_staff.id)
+        self.assertEqual(
+            self.db.scalar(
+                select(ComplaintEvent.id).where(
+                    ComplaintEvent.complaint_id == complaint.id,
+                    ComplaintEvent.event_type == "reassigned",
+                )
+            ) is not None,
+            True,
+        )
+        reassignment_notification_count = self.db.query(Notification).filter_by(
+            user_id=self.other_staff.id,
+            complaint_id=complaint.id,
+        ).count()
+        self.assertEqual(reassignment_notification_count, 1)
+
+        # Repeating the effective assignment is a no-op for history and alerts.
+        complaint_routes.assign_complaint(
+            complaint.id,
+            AssignComplaintRequest(staff_id=self.other_staff.id),
+            self.db,
+            self.admin,
+        )
+        self.assertEqual(
+            self.db.query(ComplaintEvent).filter_by(
+                complaint_id=complaint.id,
+                event_type="reassigned",
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            self.db.query(Notification).filter_by(
+                user_id=self.other_staff.id,
+                complaint_id=complaint.id,
+            ).count(),
+            reassignment_notification_count,
+        )
+
+    def test_admin_assignment_rejects_missing_and_inactive_staff(self):
+        complaint = self.make_complaint(unassigned=True)
+        self.other_staff.is_active = False
+        self.db.commit()
+
+        for staff_id in (999999, self.other_staff.id):
+            with self.subTest(staff_id=staff_id):
+                with self.assertRaises(HTTPException) as raised:
+                    complaint_routes.assign_complaint(
+                        complaint.id,
+                        AssignComplaintRequest(staff_id=staff_id),
+                        self.db,
+                        self.admin,
+                    )
+                self.assertEqual(raised.exception.status_code, 400)
+
     def test_admin_repair_return_requires_assignee_and_keeps_audit_event(self):
-        complaint = self.make_complaint(ComplaintStatus.AwaitingVerification)
+        complaint = self.make_complaint()
+        self.submit(complaint)
+        self.age_latest_repair(complaint)
 
         result = complaint_routes.admin_return_for_repair(
             complaint.id,
@@ -318,7 +422,9 @@ class RepairWorkflowTests(unittest.TestCase):
         )
 
     def test_admin_nonresponse_closure_requires_confirmation_and_reason(self):
-        complaint = self.make_complaint(ComplaintStatus.AwaitingVerification)
+        complaint = self.make_complaint()
+        self.submit(complaint)
+        self.age_latest_repair(complaint)
 
         with self.assertRaises(HTTPException):
             complaint_routes.admin_close_after_nonresponse(
@@ -354,14 +460,121 @@ class RepairWorkflowTests(unittest.TestCase):
         self.assertEqual(event.actor_id, self.admin.id)
         self.assertIn("not recorded as student approval", self.db.scalar(select(Notification.message).where(Notification.user_id == self.student.id, Notification.title == "Complaint administratively closed")))
 
+    def test_admin_verification_is_blocked_before_seven_full_days(self):
+        complaint = self.make_complaint()
+        self.submit(complaint)
+        self.age_latest_repair(complaint, timedelta(days=7) - timedelta(hours=1))
+
+        with self.assertRaises(HTTPException) as raised:
+            complaint_routes.admin_decide_repair_verification(
+                complaint.id,
+                AdminRepairVerificationRequest(action="approve"),
+                self.db,
+                self.admin,
+            )
+
+        self.assertEqual(raised.exception.status_code, 409)
+        self.db.refresh(complaint)
+        self.assertEqual(complaint.status, ComplaintStatus.AwaitingVerification)
+
+        with self.assertRaises(HTTPException) as return_error:
+            complaint_routes.admin_return_for_repair(
+                complaint.id,
+                AdminRepairReturnRequest(reason="Request another repair."),
+                self.db,
+                self.admin,
+            )
+        self.assertEqual(return_error.exception.status_code, 409)
+        with self.assertRaises(HTTPException) as close_error:
+            complaint_routes.admin_close_after_nonresponse(
+                complaint.id,
+                AdminNonResponseClosureRequest(
+                    confirmed=True,
+                    reason="Reviewed evidence but the student has not responded.",
+                ),
+                self.db,
+                self.admin,
+            )
+        self.assertEqual(close_error.exception.status_code, 409)
+
+    def test_admin_can_approve_after_seven_days_once_with_audit_and_notifications(self):
+        complaint = self.make_complaint()
+        self.submit(complaint)
+        repair = self.age_latest_repair(complaint)
+
+        result = complaint_routes.admin_decide_repair_verification(
+            complaint.id,
+            AdminRepairVerificationRequest(action="approve"),
+            self.db,
+            self.admin,
+        )
+
+        self.db.refresh(complaint)
+        self.assertEqual(result["status"], ComplaintStatus.Resolved)
+        self.assertEqual(complaint.status, ComplaintStatus.Resolved)
+        event = self.db.scalar(
+            select(ComplaintEvent).where(
+                ComplaintEvent.complaint_id == complaint.id,
+                ComplaintEvent.event_type == "admin_approved_repair",
+            )
+        )
+        self.assertEqual(event.actor_id, self.admin.id)
+        self.assertIn(str(repair.id), event.message)
+        self.assertTrue(
+            self.db.scalar(
+                select(Notification.id).where(
+                    Notification.complaint_id == complaint.id,
+                    Notification.title == "Repair approved by administrator",
+                )
+            )
+        )
+        with self.assertRaises(HTTPException):
+            complaint_routes.admin_decide_repair_verification(
+                complaint.id,
+                AdminRepairVerificationRequest(action="approve"),
+                self.db,
+                self.admin,
+            )
+
+    def test_admin_rejection_requires_reason_and_returns_case_for_rework(self):
+        complaint = self.make_complaint()
+        self.submit(complaint)
+        self.age_latest_repair(complaint)
+
+        with self.assertRaises(HTTPException) as raised:
+            complaint_routes.admin_decide_repair_verification(
+                complaint.id,
+                AdminRepairVerificationRequest(action="reject", reason="  "),
+                self.db,
+                self.admin,
+            )
+        self.assertEqual(raised.exception.status_code, 422)
+
+        result = complaint_routes.admin_decide_repair_verification(
+            complaint.id,
+            AdminRepairVerificationRequest(action="reject", reason="The repair did not resolve the leak."),
+            self.db,
+            self.admin,
+        )
+        self.db.refresh(complaint)
+        self.assertEqual(result["status"], ComplaintStatus.InProgress)
+        event = self.db.scalar(
+            select(ComplaintEvent).where(
+                ComplaintEvent.complaint_id == complaint.id,
+                ComplaintEvent.event_type == "admin_rejected_repair",
+            )
+        )
+        self.assertEqual(event.actor_id, self.admin.id)
+        self.assertIn("did not resolve the leak", event.message)
+
     def test_due_notifications_are_idempotent_and_never_close_the_complaint(self):
         complaint = self.make_complaint()
         self.submit(complaint)
         repair = self.db.scalar(select(ComplaintRepairSubmission).where(ComplaintRepairSubmission.complaint_id == complaint.id))
-        repair.submitted_at = repair.submitted_at - timedelta(hours=80)
+        repair.submitted_at = datetime.now(timezone.utc) - timedelta(days=8)
         self.db.commit()
 
-        test_settings = SimpleNamespace(verification_reminder_hours=24, verification_review_hours=72)
+        test_settings = SimpleNamespace(verification_reminder_hours=24)
         with patch.object(complaint_routes, "get_settings", return_value=test_settings):
             first = complaint_routes.process_due_verification_notifications(self.db)
             second = complaint_routes.process_due_verification_notifications(self.db)
@@ -392,6 +605,7 @@ class RepairWorkflowTests(unittest.TestCase):
             ("POST", "/{complaint_id}/verification"): (UserRole.student, self.student, self.staff),
             ("GET", "/admin/verification"): (UserRole.admin, self.admin, self.staff),
             ("POST", "/admin/verification/{complaint_id}/close"): (UserRole.admin, self.admin, self.student),
+            ("POST", "/admin/verification/{complaint_id}/decision"): (UserRole.admin, self.admin, self.student),
         }
         routes = {
             (method, route.path): route

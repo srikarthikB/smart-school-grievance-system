@@ -34,7 +34,6 @@ export default function Register() {
     // backend — so the field silently swallowed user input and blocked
     // submission for no reason. If the backend gains a student_id column,
     // add it to both form state AND the payload at the same time.
-    department: "Academic",
     role: "student",
   });
 
@@ -74,7 +73,6 @@ export default function Register() {
         email: form.email.trim(),
         password: form.password,
         role: "student",
-        department: form.department,
       };
 
       await register(payload);
@@ -145,14 +143,14 @@ export default function Register() {
 
           {/* Validation Alert messages */}
           {error && (
-            <div className="bg-rose-50 border border-rose-150 p-4 rounded-xl text-xs font-bold text-rose-700 mb-6 flex items-start gap-2.5 animate-pulse">
+            <div role="alert" aria-live="assertive" className="bg-rose-50 border border-rose-150 p-4 rounded-xl text-xs font-bold text-rose-700 mb-6 flex items-start gap-2.5 animate-pulse">
               <AlertCircle className="h-4.5 w-4.5 text-rose-600 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           {/* Main styled form */}
-          <form onSubmit={submit} className="space-y-6">
+          <form onSubmit={submit} aria-busy={loading} className="space-y-6">
             
             {/* SECTION 1: Personal Information header line */}
             <div className="space-y-4">
@@ -165,10 +163,11 @@ export default function Register() {
 
               {/* Full Name field */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                <label htmlFor="register-name" className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
                   Full Name
                 </label>
                 <input 
+                  id="register-name"
                   type="text"
                   required
                   value={form.name}
@@ -176,24 +175,6 @@ export default function Register() {
                   placeholder="Enter your full name"
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0c3127] transition-all"
                 />
-              </div>
-
-              {/* Department selector — full width now that Student ID is removed */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-                  Department
-                </label>
-                <select 
-                  value={form.department}
-                  onChange={(e) => setForm({ ...form, department: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold text-slate-705 focus:outline-none focus:ring-1 focus:ring-[#0c3127] cursor-pointer"
-                >
-                  {["Academic", "Discipline", "Infrastructure", "Transport", "Administration"].map((item) => (
-                    <option key={item} value={item}>
-                      {item}
-                    </option>
-                  ))}
-                </select>
               </div>
 
             </div>
@@ -209,12 +190,13 @@ export default function Register() {
 
               {/* Institutional Email Address */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                <label htmlFor="register-email" className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
                   Institutional Email
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                   <input 
+                    id="register-email"
                     type="email"
                     required
                     value={form.email}
@@ -230,10 +212,11 @@ export default function Register() {
                 
                 {/* Password Input */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                  <label htmlFor="register-password" className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
                     Password
                   </label>
                   <input 
+                    id="register-password"
                     type="password"
                     required
                     value={form.password}
@@ -245,10 +228,11 @@ export default function Register() {
 
                 {/* Confirm Password Input */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                  <label htmlFor="register-confirm-password" className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
                     Confirm Password
                   </label>
                   <input 
+                    id="register-confirm-password"
                     type="password"
                     required
                     value={form.confirmPassword}

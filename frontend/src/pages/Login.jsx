@@ -139,23 +139,24 @@ export default function Login() {
 
               {/* Login Errors */}
               {error && (
-                <div className="bg-rose-50 border border-rose-150 p-3.5 rounded-xl text-xs font-bold text-rose-700 mb-6 flex items-start gap-2.5 animate-pulse">
+                <div role="alert" aria-live="assertive" className="bg-rose-50 border border-rose-150 p-3.5 rounded-xl text-xs font-bold text-rose-700 mb-6 flex items-start gap-2.5 animate-pulse">
                   <Lock className="h-4.5 w-4.5 text-rose-600 shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </div>
               )}
 
               {/* Submission Form structure */}
-              <form onSubmit={submit} className="space-y-5">
+              <form onSubmit={submit} aria-busy={loading} className="space-y-5">
                 
                 {/* Email address field */}
                 <div className="space-y-1.5 focus-within:text-[#0c3127] transition-all">
-                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+                  <label htmlFor="login-email" className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
                     University Email
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <input 
+                      id="login-email"
                       type="email"
                       required
                       value={form.email}
@@ -169,7 +170,7 @@ export default function Login() {
                 {/* Password field with Forgot link option */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
+                    <label htmlFor="login-password" className="text-[10px] font-black uppercase text-slate-400 tracking-wider">
                       Password
                     </label>
                     <button 
@@ -184,6 +185,7 @@ export default function Login() {
                   <div className="relative">
                     <LockKeyhole className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                     <input 
+                      id="login-password"
                       type={showPassword ? "text" : "password"}
                       required
                       value={form.password}
@@ -194,6 +196,7 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#0c3127] p-1 rounded transition-colors"
                       title={showPassword ? "Hide password" : "Show password"}
                     >

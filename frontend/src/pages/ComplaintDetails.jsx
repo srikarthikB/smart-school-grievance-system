@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import api from "../api/client";
 import { useAuth } from "../auth/AuthContext.jsx";
+import ComplaintStatusBadge from "../components/ComplaintStatusBadge.jsx";
 import RepairWorkflow from "../components/RepairWorkflow.jsx";
 import { 
   FileText, 
@@ -217,6 +218,7 @@ export default function ComplaintDetails() {
           <h2 className="text-slate-900 text-2xl font-black tracking-tight flex flex-wrap items-center gap-2">
             <span>#GRV-2026-{String(complaint.id).padStart(3, "0")}:</span>
             <span className="font-extrabold text-slate-700">{complaint.title}</span>
+            <ComplaintStatusBadge status={complaint.status} />
           </h2>
         </div>
 

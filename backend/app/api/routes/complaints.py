@@ -30,6 +30,7 @@ from app.schemas.complaint import (
 from app.schemas.repair import (
     AdminNonResponseClosureRequest,
     AdminRepairReturnRequest,
+    AdminRepairVerificationRequest,
     ReminderRequest,
     RepairVerificationRequest,
 )
@@ -43,6 +44,7 @@ from app.services.complaint_visibility import (
 router = APIRouter()
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+VERIFICATION_REVIEW_INTERVAL = timedelta(days=7)
 
 
 def _is_event_dedupe_conflict(exc: IntegrityError) -> bool:
@@ -119,6 +121,34 @@ def utc_datetime(value: datetime) -> datetime:
     return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 
+def latest_repair_submission(db: Session, complaint: Complaint) -> ComplaintRepairSubmission | None:
+    return db.scalar(
+        select(ComplaintRepairSubmission)
+        .where(ComplaintRepairSubmission.complaint_id == complaint.id)
+        .order_by(ComplaintRepairSubmission.submitted_at.desc(), ComplaintRepairSubmission.id.desc())
+        .limit(1)
+    )
+
+
+def require_admin_verification_deadline(db: Session, complaint: Complaint) -> ComplaintRepairSubmission:
+    repair = latest_repair_submission(db, complaint)
+    if not repair:
+        raise HTTPException(status_code=409, detail="No repair submission is available for administrator verification")
+    evidence_id = db.scalar(
+        select(ComplaintAttachment.id).where(
+            ComplaintAttachment.complaint_id == complaint.id,
+            ComplaintAttachment.repair_submission_id == repair.id,
+            ComplaintAttachment.size_bytes > 0,
+        )
+    )
+    if evidence_id is None:
+        raise HTTPException(status_code=409, detail="Repair photo evidence is not available for administrator verification")
+    deadline = utc_datetime(repair.submitted_at) + VERIFICATION_REVIEW_INTERVAL
+    if datetime.now(timezone.utc) < deadline:
+        raise HTTPException(status_code=409, detail="Administrator verification is available only after seven full days")
+    return repair
+
+
 def repair_history_payload(db: Session, complaint: Complaint, user: User) -> list[dict]:
     submissions = db.scalars(
         select(ComplaintRepairSubmission)
@@ -150,6 +180,7 @@ def repair_history_payload(db: Session, complaint: Complaint, user: User) -> lis
             "id": item.id,
             "note": redact_anonymous_identity(item.note, user, complaint),
             "submitted_at": item.submitted_at,
+            "review_deadline": utc_datetime(item.submitted_at) + VERIFICATION_REVIEW_INTERVAL,
             "submitted_by": (
                 None
                 if (
@@ -634,14 +665,9 @@ def process_due_verification_notifications(db: Session) -> dict[str, int]:
         .with_for_update()
     ).all()
     reminder_interval = timedelta(hours=settings.verification_reminder_hours)
-    review_interval = timedelta(hours=settings.verification_review_hours)
+    review_interval = VERIFICATION_REVIEW_INTERVAL
     for complaint in complaints:
-        repair = db.scalar(
-            select(ComplaintRepairSubmission)
-            .where(ComplaintRepairSubmission.complaint_id == complaint.id)
-            .order_by(ComplaintRepairSubmission.submitted_at.desc(), ComplaintRepairSubmission.id.desc())
-            .limit(1)
-        )
+        repair = latest_repair_submission(db, complaint)
         if not repair:
             continue
         elapsed = now - utc_datetime(repair.submitted_at)
@@ -678,7 +704,7 @@ def process_due_verification_notifications(db: Session) -> dict[str, int]:
                     db,
                     complaint,
                     "Verification overdue - admin review needed",
-                    f"{complaint.title} has passed the configured verification review interval.",
+                    f"{complaint.title} has passed the seven-day verification review period.",
                 )
                 overdue_flags += 1
     db.commit()
@@ -709,11 +735,8 @@ def admin_verification_queue(
     for complaint in complaints:
         repairs = repair_history_payload(db, complaint, _)
         latest = repairs[-1] if repairs else None
-        elapsed_hours = (
-            (now - utc_datetime(latest["submitted_at"])).total_seconds() / 3600
-            if latest
-            else 0
-        )
+        elapsed_hours = (now - utc_datetime(latest["submitted_at"])).total_seconds() / 3600 if latest else 0
+        review_deadline = latest["review_deadline"] if latest else None
         timeline = db.scalars(
             select(ComplaintEvent)
             .options(joinedload(ComplaintEvent.actor))
@@ -729,7 +752,14 @@ def admin_verification_queue(
             }
             for event in timeline
             if event.event_type
-            in {"verification_reminder", "verification_overdue", "admin_review", "admin_nonresponse_closure"}
+            in {
+                "verification_reminder",
+                "verification_overdue",
+                "admin_review",
+                "admin_approved_repair",
+                "admin_rejected_repair",
+                "admin_nonresponse_closure",
+            }
         ]
         result.append(
             {
@@ -743,9 +773,10 @@ def admin_verification_queue(
                 "assigned_to": complaint.assigned_to,
                 "latest_repair": latest,
                 "repair_history": repairs,
-                "overdue": elapsed_hours >= settings.verification_review_hours,
+                "overdue": bool(review_deadline and now >= review_deadline),
                 "age_hours": round(elapsed_hours, 1),
-                "review_interval_hours": settings.verification_review_hours,
+                "review_interval_hours": int(VERIFICATION_REVIEW_INTERVAL.total_seconds() // 3600),
+                "review_deadline": review_deadline,
                 "reminder_interval_hours": settings.verification_reminder_hours,
                 "reminder_history": reminder_history,
                 "timeline": [
@@ -862,6 +893,7 @@ def admin_return_for_repair(
     )
     if not complaint or complaint.status != ComplaintStatus.AwaitingVerification:
         raise HTTPException(status_code=409, detail="Complaint is not awaiting verification")
+    repair = require_admin_verification_deadline(db, complaint)
     assignee = db.get(User, complaint.assigned_to) if complaint.assigned_to else None
     if not assignee or assignee.role != UserRole.staff:
         raise HTTPException(status_code=409, detail="Assign a staff member before returning this complaint for repair")
@@ -873,6 +905,7 @@ def admin_return_for_repair(
         current_user.id,
         "admin_returned_for_repair",
         f"Administrator {current_user.name} returned the complaint for further repair: {reason}",
+        f"admin-returned-for-repair:{repair.id}",
     )
     notify_user(db, assignee.id, complaint, "Further repair required", f"An administrator returned {complaint.title} for more work.")
     notify_user(db, complaint.created_by, complaint, "Further repair requested", f"An administrator requested another repair for {complaint.title}.")
@@ -893,6 +926,7 @@ def admin_close_after_nonresponse(
     )
     if not complaint or complaint.status != ComplaintStatus.AwaitingVerification:
         raise HTTPException(status_code=409, detail="Complaint is not awaiting verification")
+    repair = require_admin_verification_deadline(db, complaint)
     if not payload.confirmed:
         raise HTTPException(status_code=400, detail="Explicit confirmation is required")
     reason = payload.reason.strip()
@@ -905,6 +939,7 @@ def admin_close_after_nonresponse(
         current_user.id,
         "admin_nonresponse_closure",
         f"Administrator {current_user.name} (user {current_user.id}) administratively closed this complaint after student non-response. Reason: {reason}",
+        f"admin-nonresponse-closure:{repair.id}",
     )
     notify_user(
         db,
@@ -917,6 +952,56 @@ def admin_close_after_nonresponse(
     notify_admins(db, complaint, "Complaint administratively closed", f"{complaint.title} was closed after student non-response.")
     db.commit()
     return {"status": complaint.status, "message": "Complaint administratively closed after review"}
+
+
+@router.post("/admin/verification/{complaint_id}/decision")
+def admin_decide_repair_verification(
+    complaint_id: int,
+    payload: AdminRepairVerificationRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.admin)),
+):
+    complaint = db.scalar(
+        select(Complaint).where(Complaint.id == complaint_id).with_for_update()
+    )
+    if not complaint or complaint.status != ComplaintStatus.AwaitingVerification:
+        raise HTTPException(status_code=409, detail="Complaint is not awaiting verification")
+    repair = require_admin_verification_deadline(db, complaint)
+    reason = (payload.reason or "").strip()
+    if payload.action == "reject" and len(reason) < 5:
+        raise HTTPException(status_code=422, detail="Provide a rejection reason of at least 5 characters")
+    assignee = db.get(User, complaint.assigned_to) if complaint.assigned_to else None
+    if payload.action == "reject" and (not assignee or assignee.role != UserRole.staff):
+        raise HTTPException(status_code=409, detail="Assign a staff member before returning this complaint for repair")
+
+    if payload.action == "approve":
+        complaint.status = ComplaintStatus.Resolved
+        event_type = "admin_approved_repair"
+        event_message = f"Administrator {current_user.name} approved repair attempt {repair.id}."
+        notification_title = "Repair approved by administrator"
+        notification_message = f"An administrator approved the repair for {complaint.title}."
+        result_message = "Repair approved by administrator. The complaint is complete."
+    else:
+        complaint.status = ComplaintStatus.InProgress
+        event_type = "admin_rejected_repair"
+        event_message = f"Administrator {current_user.name} rejected repair attempt {repair.id} and requested further repair: {reason}"
+        notification_title = "Further repair required"
+        notification_message = f"An administrator requested further repair for {complaint.title}."
+        result_message = "Repair rejected by administrator and returned for further work."
+
+    add_event(
+        db,
+        complaint.id,
+        current_user.id,
+        event_type,
+        event_message,
+        f"admin-verification-decision:{repair.id}",
+    )
+    notify_user(db, complaint.created_by, complaint, notification_title, notification_message)
+    notify_user(db, complaint.assigned_to, complaint, notification_title, notification_message)
+    notify_admins(db, complaint, notification_title, notification_message)
+    db.commit()
+    return {"status": complaint.status, "action": payload.action, "message": result_message}
 
 
 @router.get("/{complaint_id}/timeline")

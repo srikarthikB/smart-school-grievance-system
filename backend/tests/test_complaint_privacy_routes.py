@@ -10,7 +10,7 @@ from app.api.deps import get_current_user
 from app.api.routes import complaints, feedback, notifications
 from app.db.session import get_db
 from app.models.complaint import Complaint
-from app.models.enums import ComplaintCategory, ComplaintStatus, UserRole
+from app.models.enums import ComplaintCategory, ComplaintPriority, ComplaintStatus, UserRole
 from app.models.feedback import Feedback
 from app.models.records import (
     ComplaintAttachment,
@@ -308,3 +308,75 @@ def test_feedback_and_notifications_are_redacted_and_scoped_to_user(
     assert admin_notifications.status_code == 200
     assert len(admin_notifications.json()) == 1
     assert PRIVATE_NAME in admin_notifications.json()[0]["message"]
+
+
+def test_assignment_is_admin_only_and_assigned_list_is_scoped_to_staff(
+    privacy_api,
+    db_session: Session,
+):
+    student = User(
+        name="Assignment Student",
+        email="assignment.student@example.com",
+        password_hash="test-only-not-a-real-password",
+        role=UserRole.student,
+    )
+    staff = User(
+        name="Assignment Staff",
+        email="assignment.staff@example.com",
+        password_hash="test-only-not-a-real-password",
+        role=UserRole.staff,
+    )
+    other_staff = User(
+        name="Other Assignment Staff",
+        email="other.assignment.staff@example.com",
+        password_hash="test-only-not-a-real-password",
+        role=UserRole.staff,
+    )
+    admin = User(
+        name="Assignment Admin",
+        email="assignment.admin@example.com",
+        password_hash="test-only-not-a-real-password",
+        role=UserRole.admin,
+    )
+    db_session.add_all([student, staff, other_staff, admin])
+    db_session.flush()
+
+    def complaint(title: str, assigned_to: int | None) -> Complaint:
+        return Complaint(
+            title=title,
+            description="A valid assignment test complaint.",
+            category=ComplaintCategory.Infrastructure,
+            priority=ComplaintPriority.Medium,
+            status=ComplaintStatus.Submitted,
+            is_anonymous=False,
+            created_by=student.id,
+            assigned_to=assigned_to,
+        )
+
+    staff_case = complaint("Staff case", staff.id)
+    other_staff_case = complaint("Other staff case", other_staff.id)
+    unassigned_case = complaint("Unassigned case", None)
+    db_session.add_all([staff_case, other_staff_case, unassigned_case])
+    db_session.commit()
+
+    assignment_path = f"/api/complaints/{unassigned_case.id}/assign"
+    for user in (student, staff):
+        response = _as_user(privacy_api, user).patch(
+            assignment_path,
+            json={"staff_id": other_staff.id},
+        )
+        assert response.status_code == 403
+
+    admin_response = _as_user(privacy_api, admin).patch(
+        assignment_path,
+        json={"staff_id": staff.id},
+    )
+    assert admin_response.status_code == 200
+    assert admin_response.json()["assigned_to"] == staff.id
+
+    staff_list = _as_user(privacy_api, staff).get("/api/complaints/assigned")
+    other_staff_list = _as_user(privacy_api, other_staff).get("/api/complaints/assigned")
+    assert staff_list.status_code == 200
+    assert {item["id"] for item in staff_list.json()} == {staff_case.id, unassigned_case.id}
+    assert other_staff_list.status_code == 200
+    assert {item["id"] for item in other_staff_list.json()} == {other_staff_case.id}
